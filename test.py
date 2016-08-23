@@ -112,6 +112,28 @@ class PWDBEVTestCase(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertFalse(hasattr(SomeOtherModel.select().first(), 'some_field'))
 
+  def test_add_not_null_constraint(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+    with self.db.atomic() as txn:
+      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+
+  def test_remove_not_null_constraint(self):
+    self.test_add_not_null_constraint()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create()
+
 
 if __name__ == "__main__":
    unittest.main()

@@ -49,8 +49,11 @@ def normalize_field_type(field):
   
 def can_convert(type1, type2):
   return True
+  
+def column_def_changed(a, b):
+  return a.null!=b.null or a.data_type!=b.data_type or a.primary_key!=b.primary_key
 
-def calc_column_changes(ntn, existing_columns, defined_fields):
+def calc_column_changes(migrator, qc, ntn, existing_columns, defined_fields):
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
   defined_columns = [pw.ColumnMetadata(
@@ -60,7 +63,7 @@ def calc_column_changes(ntn, existing_columns, defined_fields):
     f.primary_key,
     unicode(ntn)
   ) for f in defined_fields if isinstance(f, pw.Field)]
-
+  
   existing_cols_by_name = {c.name:c for c in existing_columns}
   defined_cols_by_name = {c.name:c for c in defined_columns}
   existing_col_names = set(existing_cols_by_name.keys())
@@ -79,8 +82,24 @@ def calc_column_changes(ntn, existing_columns, defined_fields):
             rename_cols[ec.name] = sc.name
             new_cols.discard(cn)
             delete_cols.discard(aka)
+  
+  alter_statements = []
+  for col_name in existing_col_names - delete_cols:
+    existing_col = existing_cols_by_name[col_name]
+    defined_col = defined_cols_by_name[rename_cols.get(col_name, col_name)]
+    if column_def_changed(existing_col, defined_col):
+      len_alter_statements = len(alter_statements)
+      if existing_col.null and not defined_col.null:
+        op = migrator.add_not_null(ntn, defined_col.name, generate=True)
+        alter_statements.append(qc.parse_node(op))
+      if not existing_col.null and defined_col.null:
+        op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
+        alter_statements.append(qc.parse_node(op))
+      if not (len_alter_statements < len(alter_statements)):
+        raise Exception("i don't know how to change %s into %s" % (existing_col, defined_col))
+        
 
-  return new_cols, delete_cols, rename_cols
+  return new_cols, delete_cols, rename_cols, alter_statements
 
 def calc_changes(db):
   migrator = None # expose eventually?
@@ -108,7 +127,7 @@ def calc_changes(db):
     ntn = table_renames.get(etn, etn)
     dcols = table_names_to_models[ntn]._meta.sorted_fields
     defined_column_name_to_field = {unicode(f.db_column):f for f in dcols}
-    adds, deletes, renames = calc_column_changes(ntn, ecols, dcols)
+    adds, deletes, renames, alter_statements = calc_column_changes(migrator, qc, ntn, ecols, dcols)
     for column_name in adds:
       operation = migrator.alter_add_column(ntn, column_name, defined_column_name_to_field[column_name], generate=True)
       to_run.append(qc.parse_node(operation))
@@ -118,6 +137,7 @@ def calc_changes(db):
     for ocn, ncn in renames.items():
       operation = migrator.rename_column(ntn, ocn, ncn, generate=True)
       to_run.append(qc.parse_node(operation))
+    to_run += alter_statements
     rename_cols_by_table[ntn] = renames
   
   '''
@@ -155,7 +175,7 @@ def register(model):
 def clear():
   all_models.clear()
 
-def add_model_hook():
+def _add_model_hook():
   init = pw.BaseModel.__init__
   def _init(*args, **kwargs):
     cls = args[0]
@@ -165,9 +185,9 @@ def add_model_hook():
     register(cls)
     init(*args, **kwargs)
   pw.BaseModel.__init__ = _init
-add_model_hook()
+_add_model_hook()
 
-def add_field_hook():
+def _add_field_hook():
   init = pw.Field.__init__
   def _init(*args, **kwargs):
     self = args[0]
@@ -179,7 +199,7 @@ def add_field_hook():
       del kwargs['aka']
     init(*args, **kwargs)
   pw.Field.__init__ = _init
-add_field_hook()
+_add_field_hook()
 
 
 def add_evolve():
