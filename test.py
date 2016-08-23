@@ -35,6 +35,37 @@ class PostgreSQL(unittest.TestCase):
     SomeModel.create(some_field='woot')
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_create_table_with_fk(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    class SomeModel2(pw.Model):
+      some_field2 = pw.CharField(null=True)
+      some_model = pw.ForeignKeyField(rel_model=SomeModel)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    sm = SomeModel.create(some_field='woot')
+    sm2 = SomeModel2.create(some_field2='woot2', some_model=sm)
+
+  def test_add_fk_column(self):
+    class Person(pw.Model):
+      class Meta:
+        database = self.db
+    class Car(pw.Model):
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.unregister(Car)
+    class Car(pw.Model):
+      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    person = Person.create()
+    car = Car.create(owner=person)
+
   def test_delete_table(self):
     self.test_create_table()
     peeweedbevolve.clear()

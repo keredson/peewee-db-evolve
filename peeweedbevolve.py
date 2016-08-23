@@ -10,6 +10,11 @@ except NameError:
 
 
 
+def sort_by_fk_deps(table_names):
+  table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys() if cls._meta.db_table in table_names}
+  models = pw.sort_models_topologically(table_names_to_models.values())
+  return [model._meta.db_table for model in models]
+  
 def calc_table_changes(existing_tables):
   existing_tables = set(existing_tables)
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
@@ -29,6 +34,7 @@ def calc_table_changes(existing_tables):
           adds.remove(to_add)
           deletes.remove(a)
           break
+  adds = sort_by_fk_deps(adds)
   return adds, deletes, renames
 
 def auto_detect_migrator(db):
@@ -137,8 +143,19 @@ def calc_changes(db):
     defined_column_name_to_field = {unicode(f.db_column):f for f in dcols}
     adds, deletes, renames, alter_statements = calc_column_changes(migrator, qc, ntn, ecols, dcols)
     for column_name in adds:
-      operation = migrator.alter_add_column(ntn, column_name, defined_column_name_to_field[column_name], generate=True)
+      field = defined_column_name_to_field[column_name]
+      operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
       to_run.append(qc.parse_node(operation))
+      if not field.null:
+        # alter_add_column strips null constraints
+        # add them back after setting any defaults
+        if field.default:
+          operation = migrator.apply_default(ntn, column_name, field, generate=True)
+          to_run.append(qc.parse_node(operation))
+        else:
+          to_run.append(('-- adding a not null column without a default will fail if the table is not empty',[]))
+        operation = migrator.add_not_null(ntn, column_name, generate=True)
+        to_run.append(qc.parse_node(operation))
     for column_name in deletes:
       operation = migrator.drop_column(ntn, column_name, generate=True, cascade=False)
       to_run.append(qc.parse_node(operation))
@@ -181,6 +198,7 @@ def _execute(db, to_run, interactive=True):
   with db.atomic() as txn:
     for sql, params in to_run:
       if interactive: print ' ', sql, params
+      if sql.strip().startswith('--'): continue
       db.execute_sql(sql, params)
   if interactive:
     print
@@ -219,6 +237,9 @@ all_models = {}
 
 def register(model):
   all_models[model] = []
+
+def unregister(model):
+  del all_models[model]
 
 def clear():
   all_models.clear()
