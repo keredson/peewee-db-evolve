@@ -1,6 +1,11 @@
 import peewee as pw
 import playhouse.migrate
 
+
+# default value for interactive
+interactive = True
+
+
 try:
   UNICODE_EXISTS = bool(type(unicode))
 except NameError:
@@ -16,10 +21,10 @@ def calc_table_changes(existing_tables):
   for to_add in list(adds):
     cls = table_names_to_models[to_add]
     if hasattr(cls._meta, 'aka'):
-      aka = cls._meta.aka
-      if hasattr(aka, 'lower'):
-        aka = [aka]
-      for a in aka:
+      akas = cls._meta.aka
+      if hasattr(akas, 'lower'):
+        akas = [akas]
+      for a in akas:
         if a in deletes:
           renames[a] = to_add
           adds.remove(to_add)
@@ -45,7 +50,8 @@ def normalize_field_type(field):
 def can_convert(type1, type2):
   return True
 
-def calc_column_changes(ntn, existing_columns, defined_columns):
+def calc_column_changes(ntn, existing_columns, defined_fields):
+  defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
   defined_columns = [pw.ColumnMetadata(
     unicode(f.db_column),
@@ -53,7 +59,7 @@ def calc_column_changes(ntn, existing_columns, defined_columns):
     f.null,
     f.primary_key,
     unicode(ntn)
-  ) for f in defined_columns if isinstance(f, pw.Field)]
+  ) for f in defined_fields if isinstance(f, pw.Field)]
 
   existing_cols_by_name = {c.name:c for c in existing_columns}
   defined_cols_by_name = {c.name:c for c in defined_columns}
@@ -62,12 +68,11 @@ def calc_column_changes(ntn, existing_columns, defined_columns):
   new_cols = defined_col_names - existing_col_names
   delete_cols = existing_col_names - defined_col_names
   rename_cols = {}
-  for cn in new_cols:
+  for cn in list(new_cols):
     sc = defined_cols_by_name[cn]
-    if hasattr(sc, 'aka'):
-      akas = sc.aka
-      if hasattr(akas, 'lower'): akas = [akas]
-      for aka in akas:
+    field = defined_fields_by_column_name[cn]
+    if hasattr(field, 'akas'):
+      for aka in field.akas:
         if aka in delete_cols:
           ec = existing_cols_by_name[aka]
           if can_convert(sc.data_type, ec.data_type):
@@ -77,7 +82,8 @@ def calc_column_changes(ntn, existing_columns, defined_columns):
 
   return new_cols, delete_cols, rename_cols
 
-def evolve(db, migrator=None):
+def calc_changes(db):
+  migrator = None # expose eventually?
   if migrator is None:
     migrator = auto_detect_migrator(db)
     
@@ -92,7 +98,8 @@ def evolve(db, migrator=None):
 
   table_adds, table_deletes, table_renames = calc_table_changes(existing_tables)
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
-  to_run += [qc.parse_node(migrator.rename_table(k,v)) for k,v in table_renames]
+  for k,v in table_renames.items():
+    to_run += [qc.parse_node(op) for op in migrator.rename_table(k,v, generate=True)]
 
 
   rename_cols_by_table = {}
@@ -123,16 +130,30 @@ def evolve(db, migrator=None):
   to_run += sql_drops(deletes)
   '''
 
-  print 'deletes', table_deletes
-  to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
-  for sql, params in to_run:
-    print sql
   
+  
+  to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
+  return to_run
+  
+def evolve(db, interactive=None):
+  to_run = calc_changes(db)
+  if interactive is None:
+    interactive = globals()['interactive']
 
+  with db.atomic() as txn:
+    for sql, params in to_run:
+      print sql
+      db.execute_sql(sql, params)
 
 
 
 all_models = {}
+
+def register(model):
+  all_models[model] = []
+
+def clear():
+  all_models.clear()
 
 def add_model_hook():
   init = pw.BaseModel.__init__
@@ -141,10 +162,24 @@ def add_model_hook():
     fields = args[3]
     if '__module__' in fields:
       del fields['__module__']
-    all_models[cls] = fields
+    register(cls)
     init(*args, **kwargs)
   pw.BaseModel.__init__ = _init
 add_model_hook()
+
+def add_field_hook():
+  init = pw.Field.__init__
+  def _init(*args, **kwargs):
+    self = args[0]
+    if 'aka' in kwargs:
+      akas = kwargs['aka']
+      if hasattr(akas, 'lower'):
+        akas = [akas]
+      self.akas = akas
+      del kwargs['aka']
+    init(*args, **kwargs)
+  pw.Field.__init__ = _init
+add_field_hook()
 
 
 def add_evolve():
