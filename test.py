@@ -66,7 +66,7 @@ class PostgreSQL(unittest.TestCase):
     person = Person.create()
     car = Car.create(owner=person)
 
-  def test_change_column_to_fk(self):
+  def test_change_int_column_to_fk(self):
     class Person(pw.Model):
       class Meta:
         database = self.db
@@ -85,6 +85,26 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(Car.select().first().owner_id, person.id)
     self.assertRaises(pw.IntegrityError, lambda: Car.create(owner=-1))
+
+  def test_change_fk_column_to_int(self):
+    class Person(pw.Model):
+      class Meta:
+        database = self.db
+    class Car(pw.Model):
+      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    person = Person.create()
+    car = Car.create(owner=person)
+    peeweedbevolve.unregister(Car)
+    class Car(pw.Model):
+      owner_id = pw.IntegerField(null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(Car.select().first().owner_id, person.id)
+    Car.create(owner_id=-1) # this should not fail
 
   def test_delete_table(self):
     self.test_create_table()

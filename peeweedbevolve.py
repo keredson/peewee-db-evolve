@@ -1,4 +1,4 @@
-import re, sys, time
+import collections, re, sys, time
 import peewee as pw
 import playhouse.migrate
 
@@ -64,7 +64,26 @@ def can_convert(type1, type2):
 def column_def_changed(a, b):
   return a.null!=b.null or a.data_type!=b.data_type or a.primary_key!=b.primary_key
 
-def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields):
+ForeignKeyMetadata = collections.namedtuple('ForeignKeyMetadata', ('column', 'dest_table', 'dest_column', 'table', 'name'))
+    
+def get_foreign_keys_by_table(db, schema='public'):
+  fks_by_table = collections.defaultdict(list)
+  sql = """
+    select kcu.column_name, ccu.table_name, ccu.column_name, tc.table_name, tc.constraint_name
+    from information_schema.table_constraints as tc
+    join information_schema.key_column_usage as kcu
+      on (tc.constraint_name = kcu.constraint_name and tc.constraint_schema = kcu.constraint_schema)
+    join information_schema.constraint_column_usage as ccu
+      on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
+    where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
+  """
+  cursor = db.execute_sql(sql, (schema,))
+  for row in cursor.fetchall():
+    fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
+    fks_by_table[fk.table].append(fk)
+  return fks_by_table
+
+def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
   qc = db.compiler()
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
@@ -115,13 +134,16 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
         raise Exception("i don't know how to change %s into %s" % (existing_col, defined_col))
   
   # look for fk changes
-  existing_fks_by_column = {fk.column:fk for fk in db.get_foreign_keys(etn)}
+  existing_fks_by_column = {fk.column:fk for fk in existing_fks}
   for col_name in not_new_columns:
     existing_column_name = renames_new_to_old.get(col_name, col_name)
     defined_field = defined_fields_by_column_name[col_name]
     existing_fk = existing_fks_by_column.get(existing_column_name)
     if isinstance(defined_field, pw.ForeignKeyField) and not existing_fk:
       op = qc._create_foreign_key(defined_field.model_class, defined_field)
+      alter_statements.append(qc.parse_node(op))
+    if not isinstance(defined_field, pw.ForeignKeyField) and existing_fk:
+      op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('DROP CONSTRAINT'), pw.Entity(existing_fk.name))
       alter_statements.append(qc.parse_node(op))
         
 
@@ -135,6 +157,7 @@ def calc_changes(db):
   existing_tables = db.get_tables()
   existing_columns = {table:db.get_columns(table) for table in existing_tables}
   existing_indexes = {table:db.get_indexes(table) for table in existing_tables}
+  foreign_keys_by_table = get_foreign_keys_by_table(db)
 
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
 
@@ -155,7 +178,7 @@ def calc_changes(db):
     ntn = table_renames.get(etn, etn)
     defined_fields = table_names_to_models[ntn]._meta.sorted_fields
     defined_column_name_to_field = {unicode(f.db_column):f for f in defined_fields}
-    adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields)
+    adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields, foreign_keys_by_table[etn])
     for column_name in adds:
       field = defined_column_name_to_field[column_name]
       operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
