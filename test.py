@@ -3,7 +3,10 @@ import peewee as pw
 import peeweedbevolve
 
 
-class PostgresTestCase(unittest.TestCase):
+# turn on for debugging individual test cases
+INTERACTIVE = False
+
+class PostgreSQL(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls):
@@ -20,7 +23,7 @@ class PostgresTestCase(unittest.TestCase):
     os.system('dropdb peeweedbevolve_test')
   
   def evolve_and_check_noop(self):
-    self.db.evolve(interactive=False)
+    self.db.evolve(interactive=INTERACTIVE)
     self.assertEqual(peeweedbevolve.calc_changes(self.db), [])
 
   def test_create_table(self):
@@ -181,6 +184,21 @@ class PostgresTestCase(unittest.TestCase):
     with self.db.atomic() as txn:
       self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create())
 
+
+# SQLite doesn't work yet!
+class SQLite(PostgreSQL):
+  @classmethod
+  def setUpClass(cls):
+    os.system('rm /tmp/peeweedbevolve_test.db')
+
+  def setUp(self):
+    self.db = pw.SqliteDatabase('/tmp/peeweedbevolve_test.db')
+    self.db.connect()
+    peeweedbevolve.clear()
+
+  def tearDown(self):
+    self.db.close()
+    os.system('rm /tmp/peeweedbevolve_test.db')
 
 
 if __name__ == "__main__":

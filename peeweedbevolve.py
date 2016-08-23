@@ -1,4 +1,4 @@
-import sys, time
+import re, sys, time
 import peewee as pw
 import playhouse.migrate
 
@@ -34,16 +34,22 @@ def calc_table_changes(existing_tables):
 def auto_detect_migrator(db):
   if db.__class__.__name__ in ['PostgresqlDatabase']:
     return playhouse.migrate.PostgresqlMigrator(db)
+  if db.__class__.__name__ in ['SqliteDatabase']:
+    return playhouse.migrate.SqliteMigrator(db)
   raise Exception("could not auto-detect migrator for %s - please provide one via the migrator kwarg" % repr(db.__class__.__name__))
 
+_re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
+  t = t.lower()
   if t in ['serial']: t = 'integer'
   if t in ['character varying']: t = 'varchar'
   if t in ['timestamp without time zone']: t = 'timestamp'
+  if t in ['double precision']: t = 'real'
+  if _re_varchar.match(t): t = 'varchar'
   return unicode(t)
   
 def normalize_field_type(field):
-  t = field.get_column_type().lower()
+  t = field.get_column_type()
   return normalize_column_type(t)
   
 def can_convert(type1, type2):
@@ -118,7 +124,9 @@ def calc_changes(db):
   table_adds, table_deletes, table_renames = calc_table_changes(existing_tables)
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
   for k,v in table_renames.items():
-    to_run += [qc.parse_node(op) for op in migrator.rename_table(k,v, generate=True)]
+    ops = migrator.rename_table(k,v, generate=True)
+    if not hasattr(ops, '__iter__'): ops = [ops] # sometimes pw return arrays, sometimes not
+    to_run += [qc.parse_node(op) for op in ops]
 
 
   rename_cols_by_table = {}
