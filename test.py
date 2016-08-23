@@ -4,9 +4,12 @@ import peeweedbevolve
 
 peeweedbevolve.interactive = False
 
-os.system('dropdb peeweedbevolve_test 2> /dev/null')
 
-class PWDBEVTestCase(unittest.TestCase):
+class PostgresTestCase(unittest.TestCase):
+
+  @classmethod
+  def setUpClass(cls):
+    os.system('dropdb peeweedbevolve_test 2> /dev/null')
 
   def setUp(self):
     os.system('createdb peeweedbevolve_test')
@@ -36,7 +39,7 @@ class PWDBEVTestCase(unittest.TestCase):
     peeweedbevolve.clear()
     self.assertEqual(peeweedbevolve.calc_changes(self.db)[0][0].split()[:2], [u'DROP', u'TABLE'])
 
-  def test_rename_table(self):
+  def test_rename_table_aka_string(self):
     self.test_create_table()
     peeweedbevolve.clear()
     class SomeOtherModel(pw.Model):
@@ -44,6 +47,17 @@ class PWDBEVTestCase(unittest.TestCase):
       class Meta:
         database = self.db
         aka = 'somemodel'
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeOtherModel.select().first().some_field, 'woot')
+
+  def test_rename_table_aka_list(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeOtherModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+        aka = ['somemodel']
     self.evolve_and_check_noop()
     self.assertEqual(SomeOtherModel.select().first().some_field, 'woot')
 
@@ -58,11 +72,21 @@ class PWDBEVTestCase(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().another_field, None)
 
-  def test_rename_column(self):
+  def test_rename_column_aka_string(self):
     self.test_create_table()
     peeweedbevolve.clear()
     class SomeModel(pw.Model):
       some_other_field = pw.CharField(null=True, aka='some_field')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_other_field, 'woot')
+
+  def test_rename_column_aka_list(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_other_field = pw.CharField(null=True, aka=['some_field'])
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -133,6 +157,32 @@ class PWDBEVTestCase(unittest.TestCase):
         database = self.db
     self.evolve_and_check_noop()
     SomeModel.create()
+
+  def test_rename_column_add_not_null_constraint(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_other_field = pw.CharField(null=False, aka='some_field')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_other_field, 'woot')
+    with self.db.atomic() as txn:
+      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+
+  def test_rename_table_rename_column_add_not_null_constraint(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeOtherModel(pw.Model):
+      some_other_field = pw.CharField(null=False, aka='some_field')
+      class Meta:
+        database = self.db
+        aka = 'somemodel'
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
+    with self.db.atomic() as txn:
+      self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create())
+
 
 
 if __name__ == "__main__":

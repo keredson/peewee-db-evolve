@@ -84,9 +84,10 @@ def calc_column_changes(migrator, qc, ntn, existing_columns, defined_fields):
             delete_cols.discard(aka)
   
   alter_statements = []
-  for col_name in existing_col_names - delete_cols:
-    existing_col = existing_cols_by_name[col_name]
-    defined_col = defined_cols_by_name[rename_cols.get(col_name, col_name)]
+  renames_new_to_old = {v:k for k,v in rename_cols.items()}
+  for col_name in defined_col_names - new_cols:
+    existing_col = existing_cols_by_name[renames_new_to_old.get(col_name, col_name)]
+    defined_col = defined_cols_by_name[col_name]
     if column_def_changed(existing_col, defined_col):
       len_alter_statements = len(alter_statements)
       if existing_col.null and not defined_col.null:
