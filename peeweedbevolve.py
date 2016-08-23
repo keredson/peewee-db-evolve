@@ -64,7 +64,8 @@ def can_convert(type1, type2):
 def column_def_changed(a, b):
   return a.null!=b.null or a.data_type!=b.data_type or a.primary_key!=b.primary_key
 
-def calc_column_changes(migrator, qc, ntn, existing_columns, defined_fields):
+def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields):
+  qc = db.compiler()
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
   defined_columns = [pw.ColumnMetadata(
@@ -96,7 +97,10 @@ def calc_column_changes(migrator, qc, ntn, existing_columns, defined_fields):
   
   alter_statements = []
   renames_new_to_old = {v:k for k,v in rename_cols.items()}
-  for col_name in defined_col_names - new_cols:
+  not_new_columns = defined_col_names - new_cols
+  
+  # look for column metadata changes
+  for col_name in not_new_columns:
     existing_col = existing_cols_by_name[renames_new_to_old.get(col_name, col_name)]
     defined_col = defined_cols_by_name[col_name]
     if column_def_changed(existing_col, defined_col):
@@ -109,6 +113,16 @@ def calc_column_changes(migrator, qc, ntn, existing_columns, defined_fields):
         alter_statements.append(qc.parse_node(op))
       if not (len_alter_statements < len(alter_statements)):
         raise Exception("i don't know how to change %s into %s" % (existing_col, defined_col))
+  
+  # look for fk changes
+  existing_fks_by_column = {fk.column:fk for fk in db.get_foreign_keys(etn)}
+  for col_name in not_new_columns:
+    existing_column_name = renames_new_to_old.get(col_name, col_name)
+    defined_field = defined_fields_by_column_name[col_name]
+    existing_fk = existing_fks_by_column.get(existing_column_name)
+    if isinstance(defined_field, pw.ForeignKeyField) and not existing_fk:
+      op = qc._create_foreign_key(defined_field.model_class, defined_field)
+      alter_statements.append(qc.parse_node(op))
         
 
   return new_cols, delete_cols, rename_cols, alter_statements
@@ -139,9 +153,9 @@ def calc_changes(db):
   for etn, ecols in existing_columns.items():
     if etn in table_deletes: continue
     ntn = table_renames.get(etn, etn)
-    dcols = table_names_to_models[ntn]._meta.sorted_fields
-    defined_column_name_to_field = {unicode(f.db_column):f for f in dcols}
-    adds, deletes, renames, alter_statements = calc_column_changes(migrator, qc, ntn, ecols, dcols)
+    defined_fields = table_names_to_models[ntn]._meta.sorted_fields
+    defined_column_name_to_field = {unicode(f.db_column):f for f in defined_fields}
+    adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields)
     for column_name in adds:
       field = defined_column_name_to_field[column_name]
       operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
