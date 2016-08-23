@@ -1,15 +1,14 @@
+import sys, time
 import peewee as pw
 import playhouse.migrate
-
-
-# default value for interactive
-interactive = True
 
 
 try:
   UNICODE_EXISTS = bool(type(unicode))
 except NameError:
   unicode = lambda s: str(s)
+
+
 
 def calc_table_changes(existing_tables):
   existing_tables = set(existing_tables)
@@ -156,15 +155,55 @@ def calc_changes(db):
   to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
   return to_run
   
-def evolve(db, interactive=None):
+def evolve(db, interactive=True):
   to_run = calc_changes(db)
-  if interactive is None:
-    interactive = globals()['interactive']
+  if not to_run:
+    if interactive:
+      print 'your database is up to date!'
+    return
+  
+  if interactive:
+    _confirm(db, to_run)
 
+  _execute(db, to_run, interactive=interactive)
+
+
+def _execute(db, to_run, interactive=True):
+  if interactive: print
   with db.atomic() as txn:
     for sql, params in to_run:
-      print sql
+      if interactive: print ' ', sql, params
       db.execute_sql(sql, params)
+  if interactive:
+    print
+    print 'SUCCESS!'
+    print 'https://github.com/keredson/peewee-db-evolve'
+    print
+
+def _confirm(db, to_run):
+  print
+  print '------------------'
+  print ' peewee-db-evolve'
+  print '------------------'
+  print
+  print "Your database needs the following %s:" % ('changes' if len(to_run)>1 else 'change')
+  print 
+  for sql, params in to_run:
+    print '  %s;' % sql
+  print 
+  while True:
+    print 'Do you want to run %s? (type yes or no)' % ('these commands' if len(to_run)>1 else 'this command'),
+    response = raw_input().strip().lower()
+    if response=='yes':
+      break
+    if response=='no':
+      sys.exit(1)
+  print 'Running in',
+  for i in range(3):
+    print '%i...' % (3-i),
+    time.sleep(1)
+  print
+  
 
 
 

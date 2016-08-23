@@ -2,8 +2,6 @@ import os, unittest
 import peewee as pw
 import peeweedbevolve
 
-peeweedbevolve.interactive = False
-
 
 class PostgresTestCase(unittest.TestCase):
 
@@ -22,7 +20,7 @@ class PostgresTestCase(unittest.TestCase):
     os.system('dropdb peeweedbevolve_test')
   
   def evolve_and_check_noop(self):
-    self.db.evolve()
+    self.db.evolve(interactive=False)
     self.assertEqual(peeweedbevolve.calc_changes(self.db), [])
 
   def test_create_table(self):
