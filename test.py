@@ -277,6 +277,28 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
 
+  def test_add_unique(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(unique=True, null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
+
+  def test_drop_unique(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(unique=True, null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
+    peeweedbevolve.clear()
+    self.test_create_table()
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+
 
 
 # SQLite doesn't work yet!
