@@ -254,6 +254,29 @@ class PostgreSQL(unittest.TestCase):
     self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
       self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create())
+  
+  def test_add_index(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(index=True, null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
+
+  def test_drop_index(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(index=True, null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
+    peeweedbevolve.clear()
+    self.test_create_table()
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+
 
 
 # SQLite doesn't work yet!

@@ -9,6 +9,8 @@ except NameError:
   unicode = lambda s: str(s)
 
 
+DEBUG = False
+
 
 def sort_by_fk_deps(table_names):
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys() if cls._meta.db_table in table_names}
@@ -165,6 +167,7 @@ def calc_changes(db):
   to_run = []
 
   table_adds, table_deletes, table_renames = calc_table_changes(existing_tables)
+  table_renamed_from = {v:k for k,v in table_renames.items()}
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
   for k,v in table_renames.items():
     ops = migrator.rename_table(k,v, generate=True)
@@ -202,19 +205,49 @@ def calc_changes(db):
     to_run += alter_statements
     rename_cols_by_table[ntn] = renames
   
+  for ntn, model in table_names_to_models.items():
+    etn = table_renamed_from.get(ntn, ntn)
+    to_run += calc_index_changes(db, migrator, existing_indexes.get(etn, []), model, rename_cols_by_table.get(ntn, {}))
+  
   '''
   to_run += calc_index_changes(existing_indexes, $schema_indexes, renames, rename_cols_by_table)
 
-  to_run += calc_fk_changes($foreign_keys, Set.new(existing_tables.keys), renames)
-
   to_run += calc_perms_changes($schema_tables, noop) unless $check_perms_for.empty?
 
-  to_run += sql_drops(deletes)
   '''
 
   
   
   to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
+  return to_run
+
+def indexes_are_same(i1, i2):
+  return unicode(i1.table)==unicode(i2.table) and i1.columns==i2.columns and i1.unique==i2.unique
+
+def normalize_indexes(indexes):
+  return [(unicode(idx.table), tuple([unicode(c) for c in idx.columns]), idx.unique) for idx in indexes]
+
+  
+def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
+  qc = db.compiler()  
+  to_run = []
+  fields = list(model._meta.sorted_fields)
+  fields_by_column_name = {f.db_column:f for f in fields}
+  pk_cols = set([unicode(f.db_column) for f in fields if f.primary_key])
+  existing_indexes = [i for i in existing_indexes if not all([(unicode(c) in pk_cols) for c in i.columns])]
+  normalized_existing_indexes = normalize_indexes(existing_indexes)
+  existing_indexes_by_normalized_existing_indexes = dict(zip(normalized_existing_indexes, existing_indexes))
+  normalized_existing_indexes = set(normalized_existing_indexes)
+  defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in model._fields_to_index()]
+  normalized_defined_indexes = set(normalize_indexes(defined_indexes))
+  to_add = normalized_defined_indexes - normalized_existing_indexes
+  to_del = normalized_existing_indexes - normalized_defined_indexes
+  for index in to_add:
+    to_run.append(qc.create_index(model, [fields_by_column_name[col] for col in index[1]], index[2]))
+  for index in to_del:
+    index = existing_indexes_by_normalized_existing_indexes[index]
+    op = migrator.drop_index(model._meta.db_table, index.name, generate=True)
+    to_run.append(qc.parse_node(op))
   return to_run
   
 def evolve(db, interactive=True):
@@ -234,7 +267,7 @@ def _execute(db, to_run, interactive=True):
   if interactive: print
   with db.atomic() as txn:
     for sql, params in to_run:
-      if interactive: print ' ', sql, params
+      if interactive or DEBUG: print ' ', sql, params
       if sql.strip().startswith('--'): continue
       db.execute_sql(sql, params)
   if interactive:
