@@ -135,7 +135,13 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
       if not (len_alter_statements < len(alter_statements)):
-        raise Exception("In table %s don't know how to change %s into %s" % (repr(ntn), existing_col, defined_col))
+        if existing_col.data_type == u'array':
+          # type reporting for arrays is broken in peewee
+          # it returns the underlying type of the array, not array
+          # ignore array columns for now (HACK)
+          pass
+        else:
+          raise Exception("In table %s don't know how to change %s into %s" % (repr(ntn), existing_col, defined_col))
   
   # look for fk changes
   existing_fks_by_column = {fk.column:fk for fk in existing_fks}
