@@ -239,7 +239,12 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   existing_indexes_by_normalized_existing_indexes = dict(zip(normalized_existing_indexes, existing_indexes))
   normalized_existing_indexes = set(normalized_existing_indexes)
   defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in model._fields_to_index()]
-  defined_indexes += [pw.IndexMetadata('', '', fields, unique, model._meta.db_table) for fields, unique in model._meta.indexes]
+  for fields, unique in model._meta.indexes:
+    try:
+      columns = [model._meta.fields[fname].db_column for fname in fields]
+    except KeyError as e:
+      raise Exception("Index %s on %s references field %s in a multi-column index, but that field doesn't exist. (Be sure to use the field name, not the db_column name, when specifying a multi-column index.)" % ((fields, unique), model.__name__, repr(e.message)))
+    defined_indexes.append(pw.IndexMetadata('', '', columns, unique, model._meta.db_table))
   normalized_defined_indexes = set(normalize_indexes(defined_indexes))
   to_add = normalized_defined_indexes - normalized_existing_indexes
   to_del = normalized_existing_indexes - normalized_defined_indexes
