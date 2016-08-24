@@ -3,13 +3,15 @@ import peewee as pw
 import playhouse.migrate
 
 
+DEBUG = False
+
+__version__=='0.1.0'
+
+
 try:
   UNICODE_EXISTS = bool(type(unicode))
 except NameError:
   unicode = lambda s: str(s)
-
-
-DEBUG = False
 
 
 def sort_by_fk_deps(table_names):
