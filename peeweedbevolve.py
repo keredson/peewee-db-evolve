@@ -239,6 +239,7 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   existing_indexes_by_normalized_existing_indexes = dict(zip(normalized_existing_indexes, existing_indexes))
   normalized_existing_indexes = set(normalized_existing_indexes)
   defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in model._fields_to_index()]
+  defined_indexes += [pw.IndexMetadata('', '', fields, unique, model._meta.db_table) for fields, unique in model._meta.indexes]
   normalized_defined_indexes = set(normalize_indexes(defined_indexes))
   to_add = normalized_defined_indexes - normalized_existing_indexes
   to_del = normalized_existing_indexes - normalized_defined_indexes

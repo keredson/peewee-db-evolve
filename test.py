@@ -345,6 +345,34 @@ class PostgreSQL(unittest.TestCase):
     self.test_create_table()
     self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
 
+  def test_add_multi_index(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+        indexes = (
+            (('id', 'some_field'), False),
+        )
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
+
+  def test_drop_multi_index(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+        indexes = (
+            (('id', 'some_field'), False),
+        )
+    self.evolve_and_check_noop()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
+    peeweedbevolve.clear()
+    self.test_create_table()
+    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+
+
 
 
 # SQLite doesn't work yet!
