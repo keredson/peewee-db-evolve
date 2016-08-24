@@ -372,6 +372,27 @@ class PostgreSQL(unittest.TestCase):
     self.test_create_table()
     self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
 
+  def test_change_integer_to_fake_fk_column(self):
+    class Person(pw.Model):
+      class Meta:
+        database = self.db
+    class Car(pw.Model):
+      owner_id = pw.IntegerField(null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    car = Car.create(owner_id=-1)
+    peeweedbevolve.unregister(Car)
+    class Car(pw.Model):
+      owner = pw.ForeignKeyField(rel_model=Person, null=False, fake=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    person = Person.create()
+    car = Car.create(owner=-2)
+    self.assertEqual(Car.select().count(), 2)
+    
+
 
 
 

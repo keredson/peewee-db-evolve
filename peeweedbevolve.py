@@ -49,15 +49,17 @@ def auto_detect_migrator(db):
 _re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
   t = t.lower()
-  if t in ['serial']: t = 'integer'
-  if t in ['character varying']: t = 'varchar'
-  if t in ['timestamp without time zone']: t = 'timestamp'
-  if t in ['double precision']: t = 'real'
-  if _re_varchar.match(t): t = 'varchar'
+  if t in ['serial','primary_key','int']: t = 'integer'
+  if t in ['character varying','varchar']: t = 'string'
+  if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
+  if t in ['double precision','numeric','decimal']: t = 'float'
+  if t in ['bool']: t = 'boolean'
+  if _re_varchar.match(t): t = 'string'
   return unicode(t)
   
 def normalize_field_type(field):
-  t = field.get_column_type()
+#  t = field.get_column_type()
+  t = field.db_field
   return normalize_column_type(t)
   
 def can_convert(type1, type2):
@@ -133,7 +135,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
       if not (len_alter_statements < len(alter_statements)):
-        raise Exception("i don't know how to change %s into %s" % (existing_col, defined_col))
+        raise Exception("In table %s don't know how to change %s into %s" % (repr(ntn), existing_col, defined_col))
   
   # look for fk changes
   existing_fks_by_column = {fk.column:fk for fk in existing_fks}
@@ -141,7 +143,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     existing_column_name = renames_new_to_old.get(col_name, col_name)
     defined_field = defined_fields_by_column_name[col_name]
     existing_fk = existing_fks_by_column.get(existing_column_name)
-    if isinstance(defined_field, pw.ForeignKeyField) and not existing_fk:
+    if isinstance(defined_field, pw.ForeignKeyField) and not existing_fk and not (hasattr(defined_field,'fake') and defined_field.fake):
       op = qc._create_foreign_key(defined_field.model_class, defined_field)
       alter_statements.append(qc.parse_node(op))
     if not isinstance(defined_field, pw.ForeignKeyField) and existing_fk:
@@ -263,24 +265,35 @@ def evolve(db, interactive=True):
       print 'your database is up to date!'
     return
   
+  commit = True
   if interactive:
-    _confirm(db, to_run)
+    commit = _confirm(db, to_run)
 
-  _execute(db, to_run, interactive=interactive)
+  _execute(db, to_run, interactive=interactive, commit=commit)
 
 
-def _execute(db, to_run, interactive=True):
+def _execute(db, to_run, interactive=True, commit=True):
   if interactive: print
-  with db.atomic() as txn:
-    for sql, params in to_run:
-      if interactive or DEBUG: print ' ', sql, params
-      if sql.strip().startswith('--'): continue
-      db.execute_sql(sql, params)
-  if interactive:
+  try:
+    with db.atomic() as txn:
+      for sql, params in to_run:
+        if interactive or DEBUG: print ' ', sql, params
+        if sql.strip().startswith('--'): continue
+        db.execute_sql(sql, params)
+      if interactive:
+        print
+        print 'SUCCESS!' if commit else 'TEST PASSED - ROLLING BACK'
+        print 'https://github.com/keredson/peewee-db-evolve'
+        print
+      if not commit:
+        txn.rollback()
+  except Exception as e:
     print
-    print 'SUCCESS!'
-    print 'https://github.com/keredson/peewee-db-evolve'
+    print '------------------------------------------'
+    print ' SQL EXCEPTION - ROLLING BACK ALL CHANGES'
+    print '------------------------------------------'
     print
+    raise e
 
 def _confirm(db, to_run):
   print
@@ -290,13 +303,15 @@ def _confirm(db, to_run):
   print
   print "Your database needs the following %s:" % ('changes' if len(to_run)>1 else 'change')
   print 
+  print '  BEGIN TRANSACTION;\n'
   for sql, params in to_run:
     print '  %s;' % sql
+  print '\n  COMMIT;'
   print 
   while True:
-    print 'Do you want to run %s? (type yes or no)' % ('these commands' if len(to_run)>1 else 'this command'),
+    print 'Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'),
     response = raw_input().strip().lower()
-    if response=='yes':
+    if response=='yes' or response=='test':
       break
     if response=='no':
       sys.exit(1)
@@ -305,6 +320,7 @@ def _confirm(db, to_run):
     print '%i...' % (3-i),
     time.sleep(1)
   print
+  return response=='yes'
   
 
 
@@ -345,6 +361,17 @@ def _add_field_hook():
     init(*args, **kwargs)
   pw.Field.__init__ = _init
 _add_field_hook()
+
+def _add_fake_fk_field_hook():
+  init = pw.ForeignKeyField.__init__
+  def _init(*args, **kwargs):
+    self = args[0]
+    if 'fake' in kwargs:
+      self.fake = kwargs['fake']
+      del kwargs['fake']
+    init(*args, **kwargs)
+  pw.ForeignKeyField.__init__ = _init
+_add_fake_fk_field_hook()
 
 
 def add_evolve():
