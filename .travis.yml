@@ -12,4 +12,5 @@ services:
   - mysql
 script:
   - python test.py PostgreSQL
+  - python test.py MySQL
 

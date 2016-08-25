@@ -5,7 +5,7 @@ import peewee as pw
 import playhouse.migrate
 
 
-DEBUG = True
+DEBUG = False
 
 __version__ = '0.1.0'
 
@@ -99,12 +99,18 @@ def get_foreign_keys_by_table(db, schema='public'):
       where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
     """
     cursor = db.execute_sql(sql, (schema,))
-    for row in cursor.fetchall():
-      fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
-      fks_by_table[fk.table].append(fk)
+  elif is_mysql(db):
+    sql = """
+      select column_name, referenced_table_name, referenced_column_name, table_name, constraint_name
+      from information_schema.key_column_usage
+      where table_schema=database() and referenced_table_name is not null and referenced_column_name is not null
+    """
+    cursor = db.execute_sql(sql, [])
   else:
-    for table in db.get_tables():
-      fks_by_table[table] = db.get_foreign_keys(table)
+    raise Exception("don't know how to get FKs for %s" % db)
+  for row in cursor.fetchall():
+    fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
+    fks_by_table[fk.table].append(fk)
   return fks_by_table
 
 def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
@@ -173,11 +179,15 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
       op = qc._create_foreign_key(defined_field.model_class, defined_field)
       alter_statements.append(qc.parse_node(op))
     if not isinstance(defined_field, pw.ForeignKeyField) and existing_fk:
-      op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('DROP CONSTRAINT'), pw.Entity(existing_fk.name))
-      alter_statements.append(qc.parse_node(op))
+      alter_statements += drop_foreign_key(db, migrator, ntn, existing_fk.name)
         
 
   return new_cols, delete_cols, rename_cols, alter_statements
+
+def drop_foreign_key(db, migrator, table_name, fk_name):
+  drop_stmt = 'drop foreign key' if is_mysql(db) else 'DROP CONSTRAINT'
+  op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
 
 def alter_add_column(db, migrator, ntn, column_name, field):
   qc = db.compiler()
