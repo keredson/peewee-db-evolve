@@ -8,49 +8,26 @@ Diffs your models against your database, and outputs SQL to (non-destructively) 
 
 Think of it as `db.create_tables()` on steriods (which doesn't drop your database).
 
+Quick Start
+-----------
+
+1. Run: `sudo pip install git+git://github.com/keredson/peewee-db-evolve.git`
+2. Add `import peeweedbevolve` anywhere before your models are defined.
+3. Run `db.evolve()` where you would have normally run `db.create_tables()`, and enjoy!
+
 Example
 -------
-Our local `evolve.py`:
-```python
-import peeweedbevolve
-import config
-import models
-
-if __name__=='__main__':
-  config.db.evolve()
-```
-
-Running it:
-```bash
-$ python evolve.py
-
-------------------
- peewee-db-evolve
-------------------
-
-Your database needs the following change:
-
-  ALTER TABLE somemodel ADD COLUMN another_field VARCHAR(255);
-
-Do you want to run this command? (type yes or no) yes
-Running in 3... 2... 1...
-
-  ALTER TABLE somemodel ADD COLUMN another_field VARCHAR(255) []
-
-SUCCESS!
-https://github.com/keredson/peewee-db-evolve
-```
-
+See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
 
 
 Tests
 -----
 
 ```bash
-peewee-db-evolve$ python -m test PostgreSQL
-...............
+$ python test.py PostgreSQL
+..............................
 ----------------------------------------------------------------------
-Ran 15 tests in 8.572s
+Ran 30 tests in 22.421s
 
 OK
 ```
