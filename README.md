@@ -21,6 +21,20 @@ Example
 -------
 See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
 
+Frequently Asked Questions
+--------------------------
+
+*Does this work with existing projects, or only with new projects?*
+
+This works very well with existing projects.  If your API only works with new projects, you're probably doing it wrong.
+
+*Don't you give up control by not writing your own migrations?*
+
+Managing your schema by writing your own migrations is kind of like managing your source code by writing your own `patch` files in addition to writing your actual code.  A well vetted `diff` tool is going to be better and faster at it than you.
+
+*How old / well vetted is this tool?*
+
+I wrote this in August 2016, but it's a port of a tool I've been using for ~10 years now.  (Called [deseb](https://github.com/keredson/deseb), funded by Google's Summer of Code project in 2006, written for Django's ORM.)  There is also a [version for Ruby on Rails](https://github.com/keredson/ruby-db-evolve), which has been used daily in production for ~1.5 years now.  (We're switching to Peewee, hence why I'm doing this port.)
 
 Tests
 -----
