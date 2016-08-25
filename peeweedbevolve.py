@@ -5,7 +5,7 @@ import peewee as pw
 import playhouse.migrate
 
 
-DEBUG = False
+DEBUG = True
 
 __version__ = '0.1.0'
 
