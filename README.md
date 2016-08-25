@@ -39,6 +39,8 @@ I wrote this in August 2016, but it's a port of a tool I've been using for ~10 y
 Tests
 -----
 
+How to run:
+
 ```bash
 $ python test.py PostgreSQL
 ..............................
@@ -47,3 +49,5 @@ Ran 30 tests in 22.421s
 
 OK
 ```
+
+<img src="https://travis-ci.org/keredson/peewee-db-evolve.svg">
