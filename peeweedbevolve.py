@@ -7,7 +7,7 @@ import playhouse.migrate
 
 DEBUG = False
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 try:
@@ -45,7 +45,7 @@ def calc_table_changes(existing_tables):
   return adds, deletes, renames
   
 def is_postgres(db):
-  return db.__class__.__name__ in ['PostgresqlDatabase']
+  return db.__class__.__name__ in ['PostgresqlDatabase','PooledPostgresqlDatabase']
 
 def is_mysql(db):
   return db.__class__.__name__ in ['MySQLDatabase']
