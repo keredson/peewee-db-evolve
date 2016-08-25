@@ -11,12 +11,11 @@ setup(
     packages=[],
     py_modules=['peeweedbevolve'],
     classifiers=[
-#        'Development Status :: 5 - Production/Stable',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: LGPL License',
+        'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
     ],
 )
-
