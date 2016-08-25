@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import collections, re, sys, time
 import peewee as pw
 import playhouse.migrate
@@ -270,10 +272,10 @@ def evolve(db, interactive=True):
   to_run = calc_changes(db)
   if not to_run:
     if interactive:
-      print
-      print 'Nothing to do... Your database is up to date!'
-      print 'https://github.com/keredson/peewee-db-evolve'
-      print
+      print()
+      print('Nothing to do... Your database is up to date!')
+      print('https://github.com/keredson/peewee-db-evolve')
+      print()
     return
   
   commit = True
@@ -284,54 +286,54 @@ def evolve(db, interactive=True):
 
 
 def _execute(db, to_run, interactive=True, commit=True):
-  if interactive: print
+  if interactive: print()
   try:
     with db.atomic() as txn:
       for sql, params in to_run:
-        if interactive or DEBUG: print ' ', sql, params
+        if interactive or DEBUG: print(' ', sql, params)
         if sql.strip().startswith('--'): continue
         db.execute_sql(sql, params)
       if interactive:
-        print
-        print 'SUCCESS!' if commit else 'TEST PASSED - ROLLING BACK'
-        print 'https://github.com/keredson/peewee-db-evolve'
-        print
+        print()
+        print('SUCCESS!' if commit else 'TEST PASSED - ROLLING BACK')
+        print('https://github.com/keredson/peewee-db-evolve')
+        print()
       if not commit:
         txn.rollback()
   except Exception as e:
-    print
-    print '------------------------------------------'
-    print ' SQL EXCEPTION - ROLLING BACK ALL CHANGES'
-    print '------------------------------------------'
-    print
+    print()
+    print('------------------------------------------')
+    print(' SQL EXCEPTION - ROLLING BACK ALL CHANGES')
+    print('------------------------------------------')
+    print()
     raise e
 
 def _confirm(db, to_run):
-  print
-  print '------------------'
-  print ' peewee-db-evolve'
-  print '------------------'
-  print
-  print "Your database needs the following %s:" % ('changes' if len(to_run)>1 else 'change')
-  print 
-  print '  BEGIN TRANSACTION;\n'
+  print()
+  print('------------------')
+  print(' peewee-db-evolve')
+  print('------------------')
+  print()
+  print("Your database needs the following %s:" % ('changes' if len(to_run)>1 else 'change'))
+  print()
+  print('  BEGIN TRANSACTION;\n')
   for sql, params in to_run:
-    print '  %s;' % sql
-  print '\n  COMMIT;'
-  print 
+    print('  %s;' % sql)
+  print('\n  COMMIT;')
+  print()
   while True:
-    print 'Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'),
+    print('Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'), end='')
     response = raw_input().strip().lower()
     if response=='yes' or response=='test':
       break
     if response=='no':
       sys.exit(1)
-  print 'Running in',
+  print('Running in', end='')
   for i in range(3):
-    print '%i...' % (3-i),
+    print('%i...' % (3-i), end='')
     sys.stdout.flush()
     time.sleep(1)
-  print
+  print()
   return response=='yes'
   
 
