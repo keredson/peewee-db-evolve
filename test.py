@@ -258,7 +258,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create(some_other_field=None))
+      self.assertRaises(self.IntegrityError, lambda: SomeModel.create(some_other_field=None))
 
   def test_rename_table_rename_column_add_not_null_constraint(self):
     self.test_create_table()
@@ -271,7 +271,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create(some_other_field=None))
+      self.assertRaises(self.IntegrityError, lambda: SomeOtherModel.create(some_other_field=None))
   
   def test_add_index(self):
     self.test_create_table()
