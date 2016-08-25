@@ -329,6 +329,7 @@ def _confirm(db, to_run):
   print 'Running in',
   for i in range(3):
     print '%i...' % (3-i),
+    sys.stdout.flush()
     time.sleep(1)
   print
   return response=='yes'
