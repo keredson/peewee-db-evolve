@@ -149,8 +149,8 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     if column_def_changed(existing_col, defined_col):
       len_alter_statements = len(alter_statements)
       if existing_col.null and not defined_col.null:
-        op = migrator.add_not_null(ntn, defined_col.name, generate=True)
-        alter_statements.append(qc.parse_node(op))
+        field = defined_fields_by_column_name[defined_col.name]
+        alter_statements += add_not_null(db, migrator, ntn, field, defined_col.name)
       if not existing_col.null and defined_col.null:
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
