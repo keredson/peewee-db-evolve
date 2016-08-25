@@ -1,0 +1,14 @@
+language: python
+python:
+  - "2.6"
+  - "2.7"
+addons:
+  postgresql: "9.4"
+install:
+  - pip install peewee psycopg2 Cython pymysql
+services:
+  - postgresql
+  - mysql
+script:
+  - python test.py PostgreSQL
+
