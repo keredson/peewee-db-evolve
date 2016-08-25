@@ -17,6 +17,7 @@ class PostgreSQL(unittest.TestCase):
     self.db = pw.PostgresqlDatabase('peeweedbevolve_test')
     self.db.connect()
     peeweedbevolve.clear()
+    self.IntegrityError = pw.IntegrityError
 
   def tearDown(self):
     self.db.close()
@@ -235,7 +236,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+      self.assertRaises(self.IntegrityError, lambda: SomeModel.create(some_field=None))
 
   def test_remove_not_null_constraint(self):
     self.test_add_not_null_constraint()
@@ -257,7 +258,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create(some_other_field=None))
 
   def test_rename_table_rename_column_add_not_null_constraint(self):
     self.test_create_table()
@@ -270,7 +271,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create())
+      self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create(some_other_field=None))
   
   def test_add_index(self):
     self.test_create_table()
@@ -439,6 +440,7 @@ class MySQL(PostgreSQL):
     self.db = pw.MySQLDatabase('peeweedbevolve_test')
     self.db.connect()
     peeweedbevolve.clear()
+    self.IntegrityError = pw.OperationalError
 
   def tearDown(self):
     self.db.close()
