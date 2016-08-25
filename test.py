@@ -66,6 +66,23 @@ class PostgreSQL(unittest.TestCase):
     person = Person.create()
     car = Car.create(owner=person)
 
+  def test_drop_fk_column(self):
+    class Person(pw.Model):
+      class Meta:
+        database = self.db
+    class Car(pw.Model):
+      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    person = Person.create()
+    car = Car.create(owner=person)
+    peeweedbevolve.unregister(Car)
+    class Car(pw.Model):
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+
   def test_change_int_column_to_fk(self):
     class Person(pw.Model):
       class Meta:
@@ -84,7 +101,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
     self.evolve_and_check_noop()
     self.assertEqual(Car.select().first().owner_id, person.id)
-    self.assertRaises(pw.IntegrityError, lambda: Car.create(owner=-1))
+    self.assertRaises(Exception, lambda: Car.create(owner=-1))
 
   def test_change_fk_column_to_int(self):
     class Person(pw.Model):
@@ -218,7 +235,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+      self.assertRaises(Exception, lambda: SomeModel.create(some_field=None))
 
   def test_remove_not_null_constraint(self):
     self.test_add_not_null_constraint()
@@ -240,7 +257,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeModel.create())
+      self.assertRaises(Exception, lambda: SomeModel.create(some_other_field=None))
 
   def test_rename_table_rename_column_add_not_null_constraint(self):
     self.test_create_table()
@@ -253,7 +270,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
-      self.assertRaises(pw.IntegrityError, lambda: SomeOtherModel.create())
+      self.assertRaises(Exception, lambda: SomeOtherModel.create(some_other_field=None))
   
   def test_add_index(self):
     self.test_create_table()
@@ -263,7 +280,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
 
   def test_drop_index(self):
     class SomeModel(pw.Model):
@@ -271,10 +288,10 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), False)])
     peeweedbevolve.clear()
     self.test_create_table()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True),])
 
   def test_add_index_table_rename(self):
     self.test_create_table()
@@ -285,7 +302,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
         aka = 'somemodel'
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2')), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2'))), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field',), False)])
 
   def test_add_index_column_rename(self):
     self.test_create_table()
@@ -295,7 +312,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field2',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field2',), False)])
 
   def test_add_index_table_and_column_rename(self):
     self.test_create_table()
@@ -306,7 +323,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
         aka = 'somemodel'
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2')), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field2',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2'))), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field2',), False)])
 
   def test_drop_index_table_rename(self):
     class SomeModel2(pw.Model):
@@ -314,7 +331,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2')), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field',), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel2'))), [(u'somemodel2', (u'id',), True), (u'somemodel2', (u'some_field',), False)])
     peeweedbevolve.clear()
     class SomeModel(pw.Model):
       some_field = pw.CharField(null=True)
@@ -322,7 +339,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
         aka = 'somemodel2'
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True),])
 
   def test_add_unique(self):
     self.test_create_table()
@@ -332,7 +349,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
 
   def test_drop_unique(self):
     class SomeModel(pw.Model):
@@ -340,10 +357,10 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'some_field',), True)])
     peeweedbevolve.clear()
     self.test_create_table()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True),])
 
   def test_add_multi_index(self):
     self.test_create_table()
@@ -356,7 +373,7 @@ class PostgreSQL(unittest.TestCase):
             (('id', 'some_field'), False),
         )
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
 
   def test_drop_multi_index(self):
     class SomeModel(pw.Model):
@@ -367,10 +384,10 @@ class PostgreSQL(unittest.TestCase):
             (('id', 'some_field'), False),
         )
     self.evolve_and_check_noop()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True), (u'somemodel', (u'id',u'some_field'), False)])
     peeweedbevolve.clear()
     self.test_create_table()
-    self.assertEqual(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel')), [(u'somemodel', (u'id',), True),])
+    self.assertEqual(sorted(peeweedbevolve.normalize_indexes(self.db.get_indexes('somemodel'))), [(u'somemodel', (u'id',), True),])
 
   def test_change_integer_to_fake_fk_column(self):
     class Person(pw.Model):
@@ -410,6 +427,22 @@ class SQLite(PostgreSQL):
   def tearDown(self):
     self.db.close()
     os.system('rm /tmp/peeweedbevolve_test.db')
+
+
+class MySQL(PostgreSQL):
+  @classmethod
+  def setUpClass(cls):
+    pass
+
+  def setUp(self):
+    os.system('echo "create database peeweedbevolve_test;" | mysql')
+    self.db = pw.MySQLDatabase('peeweedbevolve_test')
+    self.db.connect()
+    peeweedbevolve.clear()
+
+  def tearDown(self):
+    self.db.close()
+    os.system('echo "drop database peeweedbevolve_test;" | mysql')
 
 
 if __name__ == "__main__":

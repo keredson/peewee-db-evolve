@@ -21,6 +21,12 @@ Example
 -------
 See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
 
+Supported Databases
+-------------------
+
+- PostgreSQL
+- MySQL
+
 Frequently Asked Questions
 --------------------------
 

@@ -23,7 +23,7 @@ def sort_by_fk_deps(table_names):
   
 def calc_table_changes(existing_tables):
   existing_tables = set(existing_tables)
-  table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
+  table_names_to_models = {unicode(cls._meta.db_table):cls for cls in all_models.keys()}
   defined_tables = set(table_names_to_models.keys())
   adds = defined_tables - existing_tables
   deletes = existing_tables - defined_tables
@@ -35,6 +35,7 @@ def calc_table_changes(existing_tables):
       if hasattr(akas, 'lower'):
         akas = [akas]
       for a in akas:
+        a = unicode(a)
         if a in deletes:
           renames[a] = to_add
           adds.remove(to_add)
@@ -42,12 +43,23 @@ def calc_table_changes(existing_tables):
           break
   adds = sort_by_fk_deps(adds)
   return adds, deletes, renames
+  
+def is_postgres(db):
+  return db.__class__.__name__ in ['PostgresqlDatabase']
+
+def is_mysql(db):
+  return db.__class__.__name__ in ['MySQLDatabase']
+
+def is_sqlite(db):
+  return db.__class__.__name__ in ['SqliteDatabase']
 
 def auto_detect_migrator(db):
-  if db.__class__.__name__ in ['PostgresqlDatabase']:
+  if is_postgres(db):
     return playhouse.migrate.PostgresqlMigrator(db)
-  if db.__class__.__name__ in ['SqliteDatabase']:
+  if is_sqlite(db):
     return playhouse.migrate.SqliteMigrator(db)
+  if is_mysql(db):
+    return playhouse.migrate.MySQLMigrator(db)
   raise Exception("could not auto-detect migrator for %s - please provide one via the migrator kwarg" % repr(db.__class__.__name__))
 
 _re_varchar = re.compile('^varchar[(]\\d+[)]$')
@@ -76,16 +88,26 @@ ForeignKeyMetadata = collections.namedtuple('ForeignKeyMetadata', ('column', 'de
     
 def get_foreign_keys_by_table(db, schema='public'):
   fks_by_table = collections.defaultdict(list)
-  sql = """
-    select kcu.column_name, ccu.table_name, ccu.column_name, tc.table_name, tc.constraint_name
-    from information_schema.table_constraints as tc
-    join information_schema.key_column_usage as kcu
-      on (tc.constraint_name = kcu.constraint_name and tc.constraint_schema = kcu.constraint_schema)
-    join information_schema.constraint_column_usage as ccu
-      on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
-    where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
-  """
-  cursor = db.execute_sql(sql, (schema,))
+  if is_postgres(db):
+    sql = """
+      select kcu.column_name, ccu.table_name, ccu.column_name, tc.table_name, tc.constraint_name
+      from information_schema.table_constraints as tc
+      join information_schema.key_column_usage as kcu
+        on (tc.constraint_name = kcu.constraint_name and tc.constraint_schema = kcu.constraint_schema)
+      join information_schema.constraint_column_usage as ccu
+        on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
+      where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
+    """
+    cursor = db.execute_sql(sql, (schema,))
+  elif is_mysql(db):
+    sql = """
+      select column_name, referenced_table_name, referenced_column_name, table_name, constraint_name
+      from information_schema.key_column_usage
+      where table_schema=database() and referenced_table_name is not null and referenced_column_name is not null
+    """
+    cursor = db.execute_sql(sql, [])
+  else:
+    raise Exception("don't know how to get FKs for %s" % db)
   for row in cursor.fetchall():
     fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
     fks_by_table[fk.table].append(fk)
@@ -133,8 +155,8 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     if column_def_changed(existing_col, defined_col):
       len_alter_statements = len(alter_statements)
       if existing_col.null and not defined_col.null:
-        op = migrator.add_not_null(ntn, defined_col.name, generate=True)
-        alter_statements.append(qc.parse_node(op))
+        field = defined_fields_by_column_name[defined_col.name]
+        alter_statements += add_not_null(db, migrator, ntn, field, defined_col.name)
       if not existing_col.null and defined_col.null:
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
@@ -157,18 +179,31 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
       op = qc._create_foreign_key(defined_field.model_class, defined_field)
       alter_statements.append(qc.parse_node(op))
     if not isinstance(defined_field, pw.ForeignKeyField) and existing_fk:
-      op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('DROP CONSTRAINT'), pw.Entity(existing_fk.name))
-      alter_statements.append(qc.parse_node(op))
+      alter_statements += drop_foreign_key(db, migrator, ntn, existing_fk.name)
         
 
   return new_cols, delete_cols, rename_cols, alter_statements
+
+def drop_foreign_key(db, migrator, table_name, fk_name):
+  drop_stmt = 'drop foreign key' if is_mysql(db) else 'DROP CONSTRAINT'
+  op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+
+def alter_add_column(db, migrator, ntn, column_name, field):
+  qc = db.compiler()
+  operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
+  to_run = [qc.parse_node(operation)]
+  if is_mysql(db) and isinstance(field, pw.ForeignKeyField):
+    op = qc._create_foreign_key(field.model_class, field)
+    to_run.append(qc.parse_node(op))
+  return to_run
 
 def calc_changes(db):
   migrator = None # expose eventually?
   if migrator is None:
     migrator = auto_detect_migrator(db)
     
-  existing_tables = db.get_tables()
+  existing_tables = [unicode(t) for t in db.get_tables()]
   existing_columns = {table:db.get_columns(table) for table in existing_tables}
   existing_indexes = {table:db.get_indexes(table) for table in existing_tables}
   foreign_keys_by_table = get_foreign_keys_by_table(db)
@@ -188,6 +223,7 @@ def calc_changes(db):
 
 
   rename_cols_by_table = {}
+  deleted_cols_by_table = {}
   for etn, ecols in existing_columns.items():
     if etn in table_deletes: continue
     ntn = table_renames.get(etn, etn)
@@ -196,8 +232,7 @@ def calc_changes(db):
     adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields, foreign_keys_by_table[etn])
     for column_name in adds:
       field = defined_column_name_to_field[column_name]
-      operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
-      to_run.append(qc.parse_node(operation))
+      to_run += alter_add_column(db, migrator, ntn, column_name, field)
       if not field.null:
         # alter_add_column strips null constraints
         # add them back after setting any defaults
@@ -206,20 +241,22 @@ def calc_changes(db):
           to_run.append(qc.parse_node(operation))
         else:
           to_run.append(('-- adding a not null column without a default will fail if the table is not empty',[]))
-        operation = migrator.add_not_null(ntn, column_name, generate=True)
-        to_run.append(qc.parse_node(operation))
+        to_run += add_not_null(db, migrator, ntn, field, column_name)
+          
     for column_name in deletes:
-      operation = migrator.drop_column(ntn, column_name, generate=True, cascade=False)
-      to_run.append(qc.parse_node(operation))
+      to_run += drop_column(db, migrator, ntn, column_name)
     for ocn, ncn in renames.items():
-      operation = migrator.rename_column(ntn, ocn, ncn, generate=True)
-      to_run.append(qc.parse_node(operation))
+      field = defined_column_name_to_field[ncn]
+      to_run += rename_column(db, migrator, ntn, ocn, ncn, field)
     to_run += alter_statements
     rename_cols_by_table[ntn] = renames
+    deleted_cols_by_table[ntn] = deletes
   
   for ntn, model in table_names_to_models.items():
     etn = table_renamed_from.get(ntn, ntn)
-    to_run += calc_index_changes(db, migrator, existing_indexes.get(etn, []), model, rename_cols_by_table.get(ntn, {}))
+    deletes = deleted_cols_by_table.get(ntn,set())
+    existing_indexes_for_table = [i for i in existing_indexes.get(etn, []) if not any([(c in deletes) for c in i.columns])]
+    to_run += calc_index_changes(db, migrator, existing_indexes_for_table, model, rename_cols_by_table.get(ntn, {}))
   
   '''
   to_run += calc_index_changes(existing_indexes, $schema_indexes, renames, rename_cols_by_table)
@@ -232,6 +269,47 @@ def calc_changes(db):
   
   to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
   return to_run
+
+def rename_column(db, migrator, ntn, ocn, ncn, field):
+  qc = db.compiler()
+  if is_mysql(db):
+    junk = pw.Clause(
+      pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), qc.field_definition(field)
+    )
+  else:
+    junk = migrator.rename_column(ntn, ocn, ncn, generate=True)
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
+
+def normalize_op_to_clause(db, migrator, op):
+  if isinstance(op, pw.Clause): return op
+  playhouse.migrate
+  kwargs = op.kwargs.copy()
+  kwargs['generate'] = True
+  ret = getattr(migrator, op.method)(*op.args, **kwargs)
+  return ret
+
+def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
+  # sometimes a clause, sometimes an operation, sometimes a list mixed with clauses and operations
+  # turn it into a list of (sql,params) tuples
+  if not hasattr(junk, '__iter__'):
+    junk = [junk]
+  junk = [normalize_op_to_clause(db, migrator, o) for o in junk]
+  qc = db.compiler()
+  junk = [qc.parse_node(clause) for clause in junk]
+  return junk
+
+def drop_column(db, migrator, ntn, column_name):
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, migrator.drop_column(ntn, column_name, generate=True, cascade=False))
+  
+def add_not_null(db, migrator, table, field, column_name):
+  qc = db.compiler()
+  if is_postgres(db):
+    operation = migrator.add_not_null(table, column_name, generate=True)
+    return [qc.parse_node(operation)]
+  elif is_mysql(db):
+    op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
+    return [qc.parse_node(op)]
+  raise Exception('how do i add a column for %s' % db)
 
 def indexes_are_same(i1, i2):
   return unicode(i1.table)==unicode(i2.table) and i1.columns==i2.columns and i1.unique==i2.unique
