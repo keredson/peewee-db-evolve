@@ -8,6 +8,8 @@ Diffs your models against your database, and outputs SQL to (non-destructively) 
 
 Think of it as `db.create_tables()` on steriods (which doesn't drop your database).
 
+You can also think of it as schema migrations, without having to actually write the migrations.
+
 Quick Start
 -----------
 
