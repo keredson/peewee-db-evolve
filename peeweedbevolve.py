@@ -260,23 +260,27 @@ def calc_changes(db):
   to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
   return to_run
 
-def op_to_clause(db, migrator, op):
+def normalize_op_to_clause(db, migrator, op):
+  if isinstance(op, pw.Clause): return op
+  playhouse.migrate
   kwargs = op.kwargs.copy()
   kwargs['generate'] = True
   ret = getattr(migrator, op.method)(*op.args, **kwargs)
   return ret
 
-def drop_column(db, migrator, ntn, column_name):
+def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
+  # sometimes a clause, sometimes an operation, sometimes a list mixed with clauses and operations
+  # turn it into a list of (sql,params) tuples
+  if not hasattr(junk, '__iter__'):
+    junk = [junk]
+  junk = [normalize_op_to_clause(db, migrator, o) for o in junk]
   qc = db.compiler()
-  if is_mysql(db):
-    ops = migrator.drop_column(ntn, column_name, generate=True, cascade=False)
-    ops[0] = op_to_clause(db, migrator, ops[0])
-    return [qc.parse_node(op) for op in ops]
-  else:
-    operation = migrator.drop_column(ntn, column_name, generate=True, cascade=False)
-    return [qc.parse_node(operation)]
-  
+  junk = [qc.parse_node(clause) for clause in junk]
+  return junk
 
+def drop_column(db, migrator, ntn, column_name):
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, migrator.drop_column(ntn, column_name, generate=True, cascade=False))
+  
 def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
   if is_postgres(db):
