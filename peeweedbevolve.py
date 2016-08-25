@@ -7,7 +7,7 @@ import playhouse.migrate
 
 DEBUG = False
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 
 try:
@@ -104,6 +104,24 @@ def get_foreign_keys_by_table(db, schema='public'):
       select column_name, referenced_table_name, referenced_column_name, table_name, constraint_name
       from information_schema.key_column_usage
       where table_schema=database() and referenced_table_name is not null and referenced_column_name is not null
+    """
+    cursor = db.execute_sql(sql, [])
+  elif is_sqlite(db):
+    # does not work
+    sql = """
+      SELECT sql
+        FROM (
+              SELECT sql sql, type type, tbl_name tbl_name, name name
+                FROM sqlite_master
+               UNION ALL
+              SELECT sql, type, tbl_name, name
+                FROM sqlite_temp_master
+             )
+       WHERE type != 'meta'
+         AND sql NOTNULL
+         AND name NOT LIKE 'sqlite_%'
+         AND sql LIKE '%REFERENCES%'
+       ORDER BY substr(type, 2, 1), name
     """
     cursor = db.execute_sql(sql, [])
   else:
@@ -303,13 +321,13 @@ def drop_column(db, migrator, ntn, column_name):
   
 def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
-  if is_postgres(db):
-    operation = migrator.add_not_null(table, column_name, generate=True)
-    return [qc.parse_node(operation)]
+  if is_postgres(db) or is_sqlite(db):
+    junk = migrator.add_not_null(table, column_name, generate=True)
+    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
   elif is_mysql(db):
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
     return [qc.parse_node(op)]
-  raise Exception('how do i add a column for %s' % db)
+  raise Exception('how do i add a not null for %s?' % db)
 
 def indexes_are_same(i1, i2):
   return unicode(i1.table)==unicode(i2.table) and i1.columns==i2.columns and i1.unique==i2.unique
@@ -400,15 +418,15 @@ def _confirm(db, to_run):
   print('\n  COMMIT;')
   print()
   while True:
-    print('Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'), end='')
+    print('Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'), end=' ')
     response = raw_input().strip().lower()
     if response=='yes' or response=='test':
       break
     if response=='no':
       sys.exit(1)
-  print('Running in', end='')
+  print('Running in', end=' ')
   for i in range(3):
-    print('%i...' % (3-i), end='')
+    print('%i...' % (3-i), end=' ')
     sys.stdout.flush()
     time.sleep(1)
   print()

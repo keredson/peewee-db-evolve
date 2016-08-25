@@ -3,8 +3,11 @@ import peewee as pw
 import peeweedbevolve
 
 
+
 # turn on for debugging individual test cases
 INTERACTIVE = False
+
+
 
 class PostgreSQL(unittest.TestCase):
 
@@ -411,22 +414,21 @@ class PostgreSQL(unittest.TestCase):
     
 
 
+## SQLite doesn't work yet
+#class SQLite(PostgreSQL):
+#  @classmethod
+#  def setUpClass(cls):
+#    os.system('rm /tmp/peeweedbevolve_test.db')
+#
+#  def setUp(self):
+#    self.db = pw.SqliteDatabase('/tmp/peeweedbevolve_test.db')
+#    self.db.connect()
+#    peeweedbevolve.clear()
+#
+#  def tearDown(self):
+#    self.db.close()
+#    os.system('rm /tmp/peeweedbevolve_test.db')
 
-
-# SQLite doesn't work yet!
-class SQLite(PostgreSQL):
-  @classmethod
-  def setUpClass(cls):
-    os.system('rm /tmp/peeweedbevolve_test.db')
-
-  def setUp(self):
-    self.db = pw.SqliteDatabase('/tmp/peeweedbevolve_test.db')
-    self.db.connect()
-    peeweedbevolve.clear()
-
-  def tearDown(self):
-    self.db.close()
-    os.system('rm /tmp/peeweedbevolve_test.db')
 
 
 class MySQL(PostgreSQL):
