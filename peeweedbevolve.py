@@ -5,7 +5,7 @@ import peewee as pw
 import playhouse.migrate
 
 
-DEBUG = False
+DEBUG = True
 
 __version__ = '0.1.0'
 
@@ -183,7 +183,7 @@ def alter_add_column(db, migrator, ntn, column_name, field):
   qc = db.compiler()
   operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
   to_run = [qc.parse_node(operation)]
-  if is_mysql(db):
+  if is_mysql(db) and isinstance(field, pw.ForeignKeyField):
     op = qc._create_foreign_key(field.model_class, field)
     to_run.append(qc.parse_node(op))
   return to_run
