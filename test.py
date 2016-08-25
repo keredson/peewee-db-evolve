@@ -66,6 +66,23 @@ class PostgreSQL(unittest.TestCase):
     person = Person.create()
     car = Car.create(owner=person)
 
+  def test_drop_fk_column(self):
+    class Person(pw.Model):
+      class Meta:
+        database = self.db
+    class Car(pw.Model):
+      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    person = Person.create()
+    car = Car.create(owner=person)
+    peeweedbevolve.unregister(Car)
+    class Car(pw.Model):
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+
   def test_change_int_column_to_fk(self):
     class Person(pw.Model):
       class Meta:
