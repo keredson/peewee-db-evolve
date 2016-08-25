@@ -4,7 +4,9 @@
 Peewee DB Evolve
 ================
 
-Diffs your schema against your model files, and changes the schema to match.
+Diffs your models against your database, and outputs SQL to (non-destructively) update your schema.
+
+Think of it as `db.create_tables()` on steriods (which doesn't drop your database).
 
 Example
 -------
