@@ -236,8 +236,8 @@ def calc_changes(db):
     for column_name in deletes:
       to_run += drop_column(db, migrator, ntn, column_name)
     for ocn, ncn in renames.items():
-      operation = migrator.rename_column(ntn, ocn, ncn, generate=True)
-      to_run.append(qc.parse_node(operation))
+      field = defined_column_name_to_field[ncn]
+      to_run += rename_column(db, migrator, ntn, ocn, ncn, field)
     to_run += alter_statements
     rename_cols_by_table[ntn] = renames
     deleted_cols_by_table[ntn] = deletes
@@ -259,6 +259,16 @@ def calc_changes(db):
   
   to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
   return to_run
+
+def rename_column(db, migrator, ntn, ocn, ncn, field):
+  qc = db.compiler()
+  if is_mysql(db):
+    junk = pw.Clause(
+      pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), qc.field_definition(field)
+    )
+  else:
+    junk = migrator.rename_column(ntn, ocn, ncn, generate=True)
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
 
 def normalize_op_to_clause(db, migrator, op):
   if isinstance(op, pw.Clause): return op
