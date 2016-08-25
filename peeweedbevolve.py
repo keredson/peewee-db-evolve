@@ -23,9 +23,12 @@ def sort_by_fk_deps(table_names):
   
 def calc_table_changes(existing_tables):
   existing_tables = set(existing_tables)
-  table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
+  print('existing_tables', existing_tables)
+  table_names_to_models = {unicode(cls._meta.db_table):cls for cls in all_models.keys()}
   defined_tables = set(table_names_to_models.keys())
+  print('defined_tables', defined_tables)
   adds = defined_tables - existing_tables
+  print('adds',adds)
   deletes = existing_tables - defined_tables
   renames = {}
   for to_add in list(adds):
@@ -35,6 +38,7 @@ def calc_table_changes(existing_tables):
       if hasattr(akas, 'lower'):
         akas = [akas]
       for a in akas:
+        a = unicode(a)
         if a in deletes:
           renames[a] = to_add
           adds.remove(to_add)
@@ -42,12 +46,23 @@ def calc_table_changes(existing_tables):
           break
   adds = sort_by_fk_deps(adds)
   return adds, deletes, renames
+  
+def is_postgres(db):
+  return db.__class__.__name__ in ['PostgresqlDatabase']
+
+def is_mysql(db):
+  return db.__class__.__name__ in ['MySQLDatabase']
+
+def is_sqlite(db):
+  return db.__class__.__name__ in ['SqliteDatabase']
 
 def auto_detect_migrator(db):
-  if db.__class__.__name__ in ['PostgresqlDatabase']:
+  if is_postgres(db):
     return playhouse.migrate.PostgresqlMigrator(db)
-  if db.__class__.__name__ in ['SqliteDatabase']:
+  if is_sqlite(db):
     return playhouse.migrate.SqliteMigrator(db)
+  if is_mysql(db):
+    return playhouse.migrate.MySQLMigrator(db)
   raise Exception("could not auto-detect migrator for %s - please provide one via the migrator kwarg" % repr(db.__class__.__name__))
 
 _re_varchar = re.compile('^varchar[(]\\d+[)]$')
@@ -76,19 +91,23 @@ ForeignKeyMetadata = collections.namedtuple('ForeignKeyMetadata', ('column', 'de
     
 def get_foreign_keys_by_table(db, schema='public'):
   fks_by_table = collections.defaultdict(list)
-  sql = """
-    select kcu.column_name, ccu.table_name, ccu.column_name, tc.table_name, tc.constraint_name
-    from information_schema.table_constraints as tc
-    join information_schema.key_column_usage as kcu
-      on (tc.constraint_name = kcu.constraint_name and tc.constraint_schema = kcu.constraint_schema)
-    join information_schema.constraint_column_usage as ccu
-      on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
-    where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
-  """
-  cursor = db.execute_sql(sql, (schema,))
-  for row in cursor.fetchall():
-    fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
-    fks_by_table[fk.table].append(fk)
+  if is_postgres(db):
+    sql = """
+      select kcu.column_name, ccu.table_name, ccu.column_name, tc.table_name, tc.constraint_name
+      from information_schema.table_constraints as tc
+      join information_schema.key_column_usage as kcu
+        on (tc.constraint_name = kcu.constraint_name and tc.constraint_schema = kcu.constraint_schema)
+      join information_schema.constraint_column_usage as ccu
+        on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
+      where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
+    """
+    cursor = db.execute_sql(sql, (schema,))
+    for row in cursor.fetchall():
+      fk = ForeignKeyMetadata(row[0], row[1], row[2], row[3], row[4])
+      fks_by_table[fk.table].append(fk)
+  else:
+    for table in db.get_tables():
+      fks_by_table[table] = db.get_foreign_keys(table)
   return fks_by_table
 
 def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
@@ -168,7 +187,7 @@ def calc_changes(db):
   if migrator is None:
     migrator = auto_detect_migrator(db)
     
-  existing_tables = db.get_tables()
+  existing_tables = [unicode(t) for t in db.get_tables()]
   existing_columns = {table:db.get_columns(table) for table in existing_tables}
   existing_indexes = {table:db.get_indexes(table) for table in existing_tables}
   foreign_keys_by_table = get_foreign_keys_by_table(db)
