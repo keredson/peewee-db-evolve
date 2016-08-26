@@ -1,13 +1,17 @@
 from __future__ import print_function
 
 import collections, re, sys, time
+
+import colorama
+colorama.init()
+
 import peewee as pw
 import playhouse.migrate
 
 
 DEBUG = False
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 try:
@@ -386,41 +390,56 @@ def _execute(db, to_run, interactive=True, commit=True):
   try:
     with db.atomic() as txn:
       for sql, params in to_run:
-        if interactive or DEBUG: print(' ', sql, params)
+        if interactive or DEBUG: print_sql(' %s; %s' % (sql, params or ''))
         if sql.strip().startswith('--'): continue
         db.execute_sql(sql, params)
       if interactive:
         print()
-        print('SUCCESS!' if commit else 'TEST PASSED - ROLLING BACK')
-        print('https://github.com/keredson/peewee-db-evolve')
+        print((colorama.Style.BRIGHT + 'SUCCESS!' + colorama.Style.RESET_ALL) if commit else 'TEST PASSED - ROLLING BACK')
+        print(colorama.Style.DIM + 'https://github.com/keredson/peewee-db-evolve' + colorama.Style.RESET_ALL)
         print()
       if not commit:
         txn.rollback()
   except Exception as e:
     print()
     print('------------------------------------------')
-    print(' SQL EXCEPTION - ROLLING BACK ALL CHANGES')
+    print(colorama.Style.BRIGHT + colorama.Fore.RED + ' SQL EXCEPTION - ROLLING BACK ALL CHANGES' + colorama.Style.RESET_ALL)
     print('------------------------------------------')
     print()
     raise e
 
+COLORED_WORDS = [
+  (colorama.Fore.GREEN, ['CREATE', 'ADD']),
+  (colorama.Fore.YELLOW, ['ALTER', 'SET', 'RENAME']),
+  (colorama.Fore.RED, ['DROP']),
+  (colorama.Style.BRIGHT + colorama.Fore.BLUE, ['INTEGER','VARCHAR','TIMESTAMP','TEXT','SERIAL']),
+  (colorama.Style.BRIGHT, ['BEGIN','COMMIT']),
+  (colorama.Fore.CYAN, ['FOREIGN KEY', 'REFERENCES', 'UNIQUE']),
+  (colorama.Style.BRIGHT + colorama.Fore.CYAN, ['PRIMARY KEY']),
+  (colorama.Style.BRIGHT + colorama.Fore.MAGENTA, ['NOT NULL','NULL']),
+  (colorama.Style.DIM, [' ON ', '(', ')', 'INDEX', 'TABLE', 'COLUMN', 'CONSTRAINT' ,' TO ',';']),
+]
+
+def print_sql(sql):
+  for color, patterns in COLORED_WORDS:
+    for pattern in patterns:
+      sql = sql.replace(pattern, color + pattern + colorama.Style.RESET_ALL)
+  print(sql)
+  
+
 def _confirm(db, to_run):
-  print()
-  print('------------------')
-  print(' peewee-db-evolve')
-  print('------------------')
   print()
   print("Your database needs the following %s:" % ('changes' if len(to_run)>1 else 'change'))
   print()
-  print('  BEGIN TRANSACTION;\n')
+  if is_postgres(db): print_sql('  BEGIN TRANSACTION;\n')
   for sql, params in to_run:
-    print('  %s;' % sql)
-  print('\n  COMMIT;')
+    print_sql('  %s;' % sql)
+  if is_postgres(db): print_sql('\n  COMMIT;')
   print()
   while True:
-    print('Do you want to run %s? (type yes, no or test)' % ('these commands' if len(to_run)>1 else 'this command'), end=' ')
+    print('Do you want to run %s? (%s)' % (('these commands' if len(to_run)>1 else 'this command'), ('type yes, no or test' if is_postgres(db) else 'yes or no')), end=' ')
     response = raw_input().strip().lower()
-    if response=='yes' or response=='test':
+    if response=='yes' or (is_postgres(db) and response=='test'):
       break
     if response=='no':
       sys.exit(1)
