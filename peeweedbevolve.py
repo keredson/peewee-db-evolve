@@ -11,6 +11,9 @@ import playhouse.migrate
 
 DEBUG = False
 
+# peewee doesn't do defaults in the database - doh!
+DIFF_DEFAULTS = False
+
 __version__ = '0.3.0'
 
 
@@ -82,11 +85,62 @@ def normalize_field_type(field):
   t = field.db_field
   return normalize_column_type(t)
   
+  
+def normalize_default(default):
+  if default is None: return None
+  if hasattr(default, 'lower'):
+    default = unicode(default)
+    if default.startswith('nextval('): return None
+    default = default.split('::')[0]
+    default = default.strip("'")
+  return default
+  
 def can_convert(type1, type2):
   return True
   
 def column_def_changed(a, b):
-  return a.null!=b.null or a.data_type!=b.data_type or a.primary_key!=b.primary_key
+  return (
+    a.null!=b.null or 
+    a.data_type!=b.data_type or 
+    a.primary_key!=b.primary_key or
+    (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
+  )
+
+ColumnMetadata = collections.namedtuple('ColumnMetadata', ('name', 'data_type', 'null', 'primary_key', 'table', 'default'))
+
+def get_columns_by_table(db, schema='public'):
+  columns_by_table = collections.defaultdict(list)
+  if is_postgres(db) or is_mysql(db):
+    if schema=='public' and is_mysql(db):
+      schema_check = 'c.table_schema=DATABASE()'
+      params = []
+    else:
+      schema_check = 'c.table_schema=%s'
+      params = [schema]
+    sql = '''
+        select 
+          c.column_name, 
+          c.data_type, 
+          c.is_nullable='YES' as is_nullable, 
+          coalesce(tc.constraint_type='PRIMARY KEY',false) as primary_key, 
+          c.table_name, 
+          c.column_default
+        from information_schema.columns as c
+        left join information_schema.key_column_usage as kcu
+        on (c.table_name=kcu.table_name and c.table_schema=kcu.table_schema and c.column_name=kcu.column_name)
+        left join information_schema.table_constraints as tc
+        on (tc.table_name=kcu.table_name and tc.table_schema=kcu.table_schema and tc.constraint_name=kcu.constraint_name)
+        where %s
+        order by c.ordinal_position
+    ''' % schema_check
+    cursor = db.execute_sql(sql, params)
+  else:
+    raise Exception("don't know how to get columns for %s" % db)
+  for row in cursor.fetchall():
+    data_type = normalize_column_type(row[1])
+    column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], row[5])
+    columns_by_table[column.table].append(column)
+  return columns_by_table
 
 ForeignKeyMetadata = collections.namedtuple('ForeignKeyMetadata', ('column', 'dest_table', 'dest_column', 'table', 'name'))
     
@@ -138,13 +192,13 @@ def get_foreign_keys_by_table(db, schema='public'):
 def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
   qc = db.compiler()
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
-  existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
-  defined_columns = [pw.ColumnMetadata(
+  defined_columns = [ColumnMetadata(
     unicode(f.db_column),
     normalize_field_type(f),
     f.null,
     f.primary_key,
-    unicode(ntn)
+    unicode(ntn),
+    f.default
   ) for f in defined_fields if isinstance(f, pw.Field)]
   
   existing_cols_by_name = {c.name:c for c in existing_columns}
@@ -182,6 +236,13 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
       if not existing_col.null and defined_col.null:
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
+      if DIFF_DEFAULTS:
+        if normalize_default(existing_col.default) is not None and normalize_default(defined_col.default) is None:
+          field = defined_fields_by_column_name[defined_col.name]
+          alter_statements += drop_default(db, migrator, ntn, defined_col.name, field)
+        elif normalize_default(existing_col.default) != normalize_default(defined_col.default):
+          field = defined_fields_by_column_name[defined_col.name]
+          alter_statements += set_default(db, migrator, ntn, defined_col.name, field)
       if not (len_alter_statements < len(alter_statements)):
         if existing_col.data_type == u'array':
           # type reporting for arrays is broken in peewee
@@ -211,6 +272,17 @@ def drop_foreign_key(db, migrator, table_name, fk_name):
   op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
   return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
 
+def drop_default(db, migrator, table_name, column_name, field):
+  op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER COLUMN'), pw.Entity(column_name), pw.SQL('DROP DEFAULT'))
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+
+def set_default(db, migrator, table_name, column_name, field):
+  default = field.default
+  if callable(default): default = default()
+  param = pw.Param(field.db_value(default))
+  op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER COLUMN'), pw.Entity(column_name), pw.SQL('SET DEFAULT'), param)
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+
 def alter_add_column(db, migrator, ntn, column_name, field):
   qc = db.compiler()
   operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
@@ -226,8 +298,8 @@ def calc_changes(db):
     migrator = auto_detect_migrator(db)
     
   existing_tables = [unicode(t) for t in db.get_tables()]
-  existing_columns = {table:db.get_columns(table) for table in existing_tables}
   existing_indexes = {table:db.get_indexes(table) for table in existing_tables}
+  existing_columns_by_table = get_columns_by_table(db)
   foreign_keys_by_table = get_foreign_keys_by_table(db)
 
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
@@ -246,7 +318,7 @@ def calc_changes(db):
 
   rename_cols_by_table = {}
   deleted_cols_by_table = {}
-  for etn, ecols in existing_columns.items():
+  for etn, ecols in existing_columns_by_table.items():
     if etn in table_deletes: continue
     ntn = table_renames.get(etn, etn)
     defined_fields = table_names_to_models[ntn]._meta.sorted_fields
@@ -281,10 +353,7 @@ def calc_changes(db):
     to_run += calc_index_changes(db, migrator, existing_indexes_for_table, model, rename_cols_by_table.get(ntn, {}))
   
   '''
-  to_run += calc_index_changes(existing_indexes, $schema_indexes, renames, rename_cols_by_table)
-
   to_run += calc_perms_changes($schema_tables, noop) unless $check_perms_for.empty?
-
   '''
 
   
@@ -433,7 +502,7 @@ def _confirm(db, to_run):
   print()
   if is_postgres(db): print_sql('  BEGIN TRANSACTION;\n')
   for sql, params in to_run:
-    print_sql('  %s;' % sql)
+    print_sql('  %s; %s' % (sql, params or ''))
   if is_postgres(db): print_sql('\n  COMMIT;')
   print()
   while True:
@@ -447,7 +516,7 @@ def _confirm(db, to_run):
   for i in range(3):
     print('%i...' % (3-i), end=' ')
     sys.stdout.flush()
-    time.sleep(1)
+    #time.sleep(1)
   print()
   return response=='yes'
   

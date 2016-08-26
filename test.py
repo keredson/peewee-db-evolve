@@ -412,6 +412,36 @@ class PostgreSQL(unittest.TestCase):
     car = Car.create(owner=-2)
     self.assertEqual(Car.select().count(), 2)
     
+  def test_add_column_default(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True, default='woot2')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 'woot2')
+    self.assertEqual(SomeModel.get(SomeModel.id==model.id).some_field, 'woot2')
+
+  def test_drop_column_default(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True, default='woot2')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 'woot2')
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, None)
+    self.assertEqual(SomeModel.get(SomeModel.id==model.id).some_field, None)
+
 
 
 ## SQLite doesn't work
