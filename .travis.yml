@@ -6,7 +6,7 @@ python:
   - "3.4"
   - "3.5"
 install:
-  - pip install peewee psycopg2 pymysql
+  - pip install peewee psycopg2 pymysql colorama
 services:
   - postgresql
   - mysql
