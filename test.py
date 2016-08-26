@@ -414,7 +414,7 @@ class PostgreSQL(unittest.TestCase):
     
 
 
-## SQLite doesn't work yet
+## SQLite doesn't work
 #class SQLite(PostgreSQL):
 #  @classmethod
 #  def setUpClass(cls):

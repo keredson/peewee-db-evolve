@@ -21,6 +21,9 @@ Example
 -------
 See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
 
+![image](https://cloud.githubusercontent.com/assets/2049665/17993037/1d1c8cf2-6b12-11e6-8591-cd11eb263938.png)
+
+
 Supported Databases
 -------------------
 
