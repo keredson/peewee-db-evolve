@@ -250,7 +250,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
           # ignore array columns for now (HACK)
           pass
         else:
-          raise Exception("In table %s don't know how to change %s into %s" % (repr(ntn), existing_col, defined_col))
+          raise Exception("In table %s I don't know how to change %s into %s" % (repr(ntn), existing_col, defined_col))
   
   # look for fk changes
   existing_fks_by_column = {fk.column:fk for fk in existing_fks}
@@ -443,10 +443,7 @@ def evolve(db, interactive=True):
   to_run = calc_changes(db)
   if not to_run:
     if interactive:
-      print()
       print('Nothing to do... Your database is up to date!')
-      print('https://github.com/keredson/peewee-db-evolve')
-      print()
     return
   
   commit = True
@@ -466,8 +463,11 @@ def _execute(db, to_run, interactive=True, commit=True):
         db.execute_sql(sql, params)
       if interactive:
         print()
-        print((colorama.Style.BRIGHT + 'SUCCESS!' + colorama.Style.RESET_ALL) if commit else 'TEST PASSED - ROLLING BACK')
-        print(colorama.Style.DIM + 'https://github.com/keredson/peewee-db-evolve' + colorama.Style.RESET_ALL)
+        print(
+          (colorama.Style.BRIGHT + 'SUCCESS!' + colorama.Style.RESET_ALL) if commit else 'TEST PASSED - ROLLING BACK', 
+          colorama.Style.DIM + '-', 
+          'https://github.com/keredson/peewee-db-evolve' + colorama.Style.RESET_ALL
+        )
         print()
       if not commit:
         txn.rollback()
