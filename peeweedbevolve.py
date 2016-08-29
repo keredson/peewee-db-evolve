@@ -75,7 +75,7 @@ def normalize_column_type(t):
   if t in ['serial','primary_key','int']: t = 'integer'
   if t in ['character varying','varchar']: t = 'string'
   if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
-  if t in ['double precision','numeric','decimal']: t = 'float'
+  if t in ['double precision','numeric','decimal','real']: t = 'float'
   if t in ['bool']: t = 'boolean'
   if _re_varchar.match(t): t = 'string'
   return unicode(t)
@@ -321,7 +321,9 @@ def calc_changes(db):
   for etn, ecols in existing_columns_by_table.items():
     if etn in table_deletes: continue
     ntn = table_renames.get(etn, etn)
-    defined_fields = table_names_to_models[ntn]._meta.sorted_fields
+    model = table_names_to_models.get(ntn)
+    if not model: continue
+    defined_fields = model._meta.sorted_fields
     defined_column_name_to_field = {unicode(f.db_column):f for f in defined_fields}
     adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields, foreign_keys_by_table[etn])
     for column_name in adds:
