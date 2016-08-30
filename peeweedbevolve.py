@@ -14,7 +14,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.1'
+__version__ = '0.4.2'
 
 
 try:
