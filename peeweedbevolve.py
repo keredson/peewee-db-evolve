@@ -14,7 +14,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 
 
 try:
@@ -72,17 +72,15 @@ def auto_detect_migrator(db):
 _re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
   t = t.lower()
-  if t in ['serial','primary_key','int']: t = 'integer'
-  if t in ['character varying','varchar']: t = 'string'
-  if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
-  if t in ['double precision','numeric','decimal','real']: t = 'float'
-  if t in ['bool']: t = 'boolean'
-  if _re_varchar.match(t): t = 'string'
+  if t in ['serial','int','integer auto_increment']: t = 'integer'
+  if t in ['character varying']: t = 'varchar'
+  if _re_varchar.match(t): t = 'varchar'
+  if t in ['decimal']: t = 'numeric'
   return unicode(t)
   
-def normalize_field_type(field):
+def normalize_field_type(field, qc):
 #  t = field.get_column_type()
-  t = field.db_field
+  t = qc.get_column_type(field.db_field)
   return normalize_column_type(t)
   
   
@@ -194,7 +192,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   defined_columns = [ColumnMetadata(
     unicode(f.db_column),
-    normalize_field_type(f),
+    normalize_field_type(f, qc),
     f.null,
     f.primary_key,
     unicode(ntn),
@@ -228,20 +226,21 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
   for col_name in not_new_columns:
     existing_col = existing_cols_by_name[renames_new_to_old.get(col_name, col_name)]
     defined_col = defined_cols_by_name[col_name]
+    field = defined_fields_by_column_name[defined_col.name]
     if column_def_changed(existing_col, defined_col):
       len_alter_statements = len(alter_statements)
       if existing_col.null and not defined_col.null:
-        field = defined_fields_by_column_name[defined_col.name]
         alter_statements += add_not_null(db, migrator, ntn, field, defined_col.name)
       if not existing_col.null and defined_col.null:
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
+      if existing_col.data_type != defined_col.data_type and can_convert(existing_col.data_type, defined_col.data_type):
+        stmts = change_column_type(db, migrator, ntn, defined_col.name, field)
+        alter_statements += stmts
       if DIFF_DEFAULTS:
         if normalize_default(existing_col.default) is not None and normalize_default(defined_col.default) is None:
-          field = defined_fields_by_column_name[defined_col.name]
           alter_statements += drop_default(db, migrator, ntn, defined_col.name, field)
         elif normalize_default(existing_col.default) != normalize_default(defined_col.default):
-          field = defined_fields_by_column_name[defined_col.name]
           alter_statements += set_default(db, migrator, ntn, defined_col.name, field)
       if not (len_alter_statements < len(alter_statements)):
         if existing_col.data_type == u'array':
@@ -394,6 +393,17 @@ def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
 def drop_column(db, migrator, ntn, column_name):
   return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, migrator.drop_column(ntn, column_name, generate=True, cascade=False))
   
+def change_column_type(db, migrator, table_name, column_name, field):
+  qc = db.compiler()
+  column_type = qc.get_column_type(field.get_db_field())
+  if is_postgres(db):
+    op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER'), field.as_entity(), pw.SQL('TYPE'), field.__ddl_column__(column_type))
+  elif is_mysql(db):
+    op = pw.Clause(*[pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('MODIFY')] + field.__ddl__(column_type))
+  else:
+    raise Exception('how do i change a column type for %s?' % db)
+  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+  
 def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
   if is_postgres(db) or is_sqlite(db):
@@ -518,7 +528,7 @@ def _confirm(db, to_run):
   for i in range(3):
     print('%i...' % (3-i), end=' ')
     sys.stdout.flush()
-    #time.sleep(1)
+    time.sleep(1)
   print()
   return response=='yes'
   

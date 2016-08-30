@@ -442,6 +442,38 @@ class PostgreSQL(unittest.TestCase):
     self.assertEqual(model.some_field, None)
     self.assertEqual(SomeModel.get(SomeModel.id==model.id).some_field, None)
 
+  def test_change_column_type_float_decimal(self):
+    class SomeModel(pw.Model):
+      some_field = pw.FloatField(default=8)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 8)
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.DecimalField(default=8)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, 8)
+
+  def test_change_column_type_char_text(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(default='woot')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 'woot')
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.TextField(default='woot')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+
 
 
 ## SQLite doesn't work
