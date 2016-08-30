@@ -14,7 +14,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.2'
+__version__ = '0.4.3'
 
 
 try:
@@ -52,7 +52,7 @@ def calc_table_changes(existing_tables):
   return adds, deletes, renames
   
 def is_postgres(db):
-  return db.__class__.__name__ in ['PostgresqlDatabase','PooledPostgresqlDatabase']
+  return db.__class__.__name__ in ['PostgresqlDatabase','PooledPostgresqlDatabase','PostgresqlExtDatabase']
 
 def is_mysql(db):
   return db.__class__.__name__ in ['MySQLDatabase']
