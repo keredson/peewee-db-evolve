@@ -81,7 +81,7 @@ def normalize_column_type(t):
   
 def normalize_field_type(field, qc):
 #  t = field.get_column_type()
-  t = qc.get_column_type(field.db_field)
+  t = qc.get_column_type(field.get_db_field())
   return normalize_column_type(t)
   
   
