@@ -14,7 +14,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 
 
 try:
@@ -73,9 +73,10 @@ _re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
   t = t.lower()
   if t in ['serial','int','integer auto_increment']: t = 'integer'
+  if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
   if t in ['character varying']: t = 'varchar'
   if _re_varchar.match(t): t = 'varchar'
-  if t in ['decimal']: t = 'numeric'
+  if t in ['decimal','real']: t = 'numeric'
   return unicode(t)
   
 def normalize_field_type(field, qc):
@@ -94,6 +95,7 @@ def normalize_default(default):
   return default
   
 def can_convert(type1, type2):
+  if type1=='array': return False
   return True
   
 def column_def_changed(a, b):
