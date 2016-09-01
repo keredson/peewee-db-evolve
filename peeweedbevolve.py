@@ -397,11 +397,7 @@ def drop_column(db, migrator, ntn, column_name):
   
 def change_column_type(db, migrator, table_name, column_name, field):
   qc = db.compiler()
-  print('field', field)
-  print ('field.get_db_field()', field.get_db_field())
   column_type = qc.get_column_type(field.get_db_field())
-  print( 'column_type', column_type)
-  print( 'field.__ddl_column__(column_type)', field.__ddl_column__(column_type))
   if is_postgres(db):
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER'), field.as_entity(), pw.SQL('TYPE'), field.__ddl_column__(column_type))
   elif is_mysql(db):
