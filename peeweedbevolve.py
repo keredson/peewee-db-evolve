@@ -73,7 +73,7 @@ _re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
   t = t.lower()
   if t in ['serial','int','integer auto_increment']: t = 'integer'
-  if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
+  if t in ['timestamp without time zone']: t = 'timestamp'
   if t in ['character varying']: t = 'varchar'
   if _re_varchar.match(t): t = 'varchar'
   if t in ['decimal','real']: t = 'numeric'
@@ -397,7 +397,11 @@ def drop_column(db, migrator, ntn, column_name):
   
 def change_column_type(db, migrator, table_name, column_name, field):
   qc = db.compiler()
+  print('field', field)
+  print ('field.get_db_field()', field.get_db_field())
   column_type = qc.get_column_type(field.get_db_field())
+  print( 'column_type', column_type)
+  print( 'field.__ddl_column__(column_type)', field.__ddl_column__(column_type))
   if is_postgres(db):
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER'), field.as_entity(), pw.SQL('TYPE'), field.__ddl_column__(column_type))
   elif is_mysql(db):
