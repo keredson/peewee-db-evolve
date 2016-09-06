@@ -14,7 +14,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.3'
+__version__ = '0.4.4'
 
 
 try:
@@ -333,7 +333,7 @@ def calc_changes(db):
       if not field.null:
         # alter_add_column strips null constraints
         # add them back after setting any defaults
-        if field.default:
+        if field.default is not None:
           operation = migrator.apply_default(ntn, column_name, field, generate=True)
           to_run.append(qc.parse_node(operation))
         else:
