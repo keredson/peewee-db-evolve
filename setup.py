@@ -10,9 +10,11 @@ def long_description():
   else:
     return 'not available'
 
+execfile('version.py')
+
 setup(
   name='peewee-db-evolve',
-  version=__import__('peeweedbevolve').__version__,
+  version=__version__,
   description='Schema Evolution for Peewee',
   long_description=long_description(),
   author='Derek Anderson',
