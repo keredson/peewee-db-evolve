@@ -2,8 +2,11 @@ from __future__ import print_function
 
 import collections, re, sys, time
 
-import colorama
-colorama.init()
+try:
+  import colorama
+  colorama.init()
+except ImportError:
+  print('colorama not installed')
 
 import peewee as pw
 import playhouse.migrate
@@ -14,7 +17,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.4'
+__version__ = '0.4.5'
 
 
 try:
@@ -491,19 +494,24 @@ def _execute(db, to_run, interactive=True, commit=True):
     print()
     raise e
 
-COLORED_WORDS = [
-  (colorama.Fore.GREEN, ['CREATE', 'ADD']),
-  (colorama.Fore.YELLOW, ['ALTER', 'SET', 'RENAME']),
-  (colorama.Fore.RED, ['DROP']),
-  (colorama.Style.BRIGHT + colorama.Fore.BLUE, ['INTEGER','VARCHAR','TIMESTAMP','TEXT','SERIAL']),
-  (colorama.Style.BRIGHT, ['BEGIN','COMMIT']),
-  (colorama.Fore.CYAN, ['FOREIGN KEY', 'REFERENCES', 'UNIQUE']),
-  (colorama.Style.BRIGHT + colorama.Fore.CYAN, ['PRIMARY KEY']),
-  (colorama.Style.BRIGHT + colorama.Fore.MAGENTA, ['NOT NULL','NULL']),
-  (colorama.Style.DIM, [' ON ', '(', ')', 'INDEX', 'TABLE', 'COLUMN', 'CONSTRAINT' ,' TO ',';']),
-]
+COLORED_WORDS = None
+
+def init_COLORED_WORDS():
+  global COLORED_WORDS
+  COLORED_WORDS = [
+    (colorama.Fore.GREEN, ['CREATE', 'ADD']),
+    (colorama.Fore.YELLOW, ['ALTER', 'SET', 'RENAME']),
+    (colorama.Fore.RED, ['DROP']),
+    (colorama.Style.BRIGHT + colorama.Fore.BLUE, ['INTEGER','VARCHAR','TIMESTAMP','TEXT','SERIAL']),
+    (colorama.Style.BRIGHT, ['BEGIN','COMMIT']),
+    (colorama.Fore.CYAN, ['FOREIGN KEY', 'REFERENCES', 'UNIQUE']),
+    (colorama.Style.BRIGHT + colorama.Fore.CYAN, ['PRIMARY KEY']),
+    (colorama.Style.BRIGHT + colorama.Fore.MAGENTA, ['NOT NULL','NULL']),
+    (colorama.Style.DIM, [' ON ', '(', ')', 'INDEX', 'TABLE', 'COLUMN', 'CONSTRAINT' ,' TO ',';']),
+  ]
 
 def print_sql(sql):
+  if COLORED_WORDS is None: init_COLORED_WORDS()
   for color, patterns in COLORED_WORDS:
     for pattern in patterns:
       sql = sql.replace(pattern, color + pattern + colorama.Style.RESET_ALL)

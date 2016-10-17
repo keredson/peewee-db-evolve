@@ -1,5 +1,6 @@
 import os
-from distutils.core import setup
+
+from setuptools import setup
 
 def long_description():
   os.system('pandoc --from=markdown --to=rst --output=README.rst README.md')
