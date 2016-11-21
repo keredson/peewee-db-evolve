@@ -17,7 +17,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.5'
+__version__ = '0.4.6'
 
 
 try:
@@ -26,10 +26,15 @@ except NameError:
   unicode = lambda s: str(s)
 
 
-def sort_by_fk_deps(table_names):
+def mark_fks_as_deferred(table_names):
+  add_fks = []
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys() if cls._meta.db_table in table_names}
-  models = pw.sort_models_topologically(table_names_to_models.values())
-  return [model._meta.db_table for model in models]
+  for model in table_names_to_models.values():
+    for field in model._meta.sorted_fields:
+      if isinstance(field, pw.ForeignKeyField):
+        add_fks.append(field)
+        field.deferred = True
+  return add_fks
   
 def calc_table_changes(existing_tables):
   existing_tables = set(existing_tables)
@@ -51,8 +56,8 @@ def calc_table_changes(existing_tables):
           adds.remove(to_add)
           deletes.remove(a)
           break
-  adds = sort_by_fk_deps(adds)
-  return adds, deletes, renames
+  add_fks = mark_fks_as_deferred(adds)
+  return adds, add_fks, deletes, renames
   
 def is_postgres(db):
   return db.__class__.__name__ in ['PostgresqlDatabase','PooledPostgresqlDatabase','PostgresqlExtDatabase']
@@ -311,9 +316,12 @@ def calc_changes(db):
   qc = db.compiler()
   to_run = []
 
-  table_adds, table_deletes, table_renames = calc_table_changes(existing_tables)
+  table_adds, add_fks, table_deletes, table_renames = calc_table_changes(existing_tables)
   table_renamed_from = {v:k for k,v in table_renames.items()}
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
+  for field in add_fks:
+    op = qc._create_foreign_key(field.model_class, field)
+    to_run.append(qc.parse_node(op))
   for k,v in table_renames.items():
     ops = migrator.rename_table(k,v, generate=True)
     if not hasattr(ops, '__iter__'): ops = [ops] # sometimes pw return arrays, sometimes not

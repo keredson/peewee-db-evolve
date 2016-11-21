@@ -474,6 +474,17 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_circular_deps(self):
+    class SomeModel(pw.Model):
+      some_model2 = pw.ForeignKeyField(pw.DeferredRelation('SomeModel2'))
+      class Meta:
+        database = self.db
+    class SomeModel2(pw.Model):
+      some_model = pw.ForeignKeyField(SomeModel)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+
 
 
 ## SQLite doesn't work
