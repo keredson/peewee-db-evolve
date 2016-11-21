@@ -13,7 +13,7 @@ You can also think of it as schema migrations, without having to actually write 
 Quick Start
 -----------
 
-1. Run: `sudo pip install git+git://github.com/keredson/peewee-db-evolve.git`
+1. Run: `sudo pip install peewee-db-evolve`
 2. Add `import peeweedbevolve` anywhere before your models are defined.
 3. Run `db.evolve()` where you would have normally run `db.create_tables()`, and enjoy!
 
