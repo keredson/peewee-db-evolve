@@ -1,5 +1,6 @@
 import os, unittest
 import peewee as pw
+import playhouse.postgres_ext as pwe
 import peeweedbevolve
 
 
@@ -17,7 +18,7 @@ class PostgreSQL(unittest.TestCase):
 
   def setUp(self):
     os.system('createdb peeweedbevolve_test')
-    self.db = pw.PostgresqlDatabase('peeweedbevolve_test')
+    self.db = pwe.PostgresqlExtDatabase('peeweedbevolve_test')
     self.db.connect()
     peeweedbevolve.clear()
 
@@ -485,6 +486,36 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
     self.evolve_and_check_noop()
 
+  def test_change_column_max_length(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(default='w', max_length=1)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(default='woot', max_length=4)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 'woot')
+    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+
+  def test_change_datetime_timezone(self):
+    class SomeModel(pw.Model):
+      some_field = pw.DateTimeField()
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pwe.DateTimeTZField()
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+
+
 
 
 ## SQLite doesn't work
@@ -518,6 +549,9 @@ class MySQL(PostgreSQL):
   def tearDown(self):
     self.db.close()
     os.system('echo "drop database peeweedbevolve_test;" | mysql')
+
+  def test_change_datetime_timezone(self):
+    pass
 
 
 if __name__ == "__main__":

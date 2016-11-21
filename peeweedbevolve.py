@@ -17,7 +17,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.7'
+__version__ = '0.4.8'
 
 
 try:
@@ -112,11 +112,14 @@ def column_def_changed(a, b):
   return (
     a.null!=b.null or 
     a.data_type!=b.data_type or 
+    a.max_length!=b.max_length or 
     a.primary_key!=b.primary_key or
     (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
   )
 
-ColumnMetadata = collections.namedtuple('ColumnMetadata', ('name', 'data_type', 'null', 'primary_key', 'table', 'default'))
+ColumnMetadata = collections.namedtuple('ColumnMetadata', (
+  'name', 'data_type', 'null', 'primary_key', 'table', 'default', 'max_length'
+))
 
 def get_columns_by_table(db, schema='public'):
   columns_by_table = collections.defaultdict(list)
@@ -134,7 +137,8 @@ def get_columns_by_table(db, schema='public'):
           c.is_nullable='YES' as is_nullable, 
           coalesce(tc.constraint_type='PRIMARY KEY',false) as primary_key, 
           c.table_name, 
-          c.column_default
+          c.column_default,
+          c.character_maximum_length as max_length
         from information_schema.columns as c
         left join information_schema.key_column_usage as kcu
         on (c.table_name=kcu.table_name and c.table_schema=kcu.table_schema and c.column_name=kcu.column_name)
@@ -148,7 +152,8 @@ def get_columns_by_table(db, schema='public'):
     raise Exception("don't know how to get columns for %s" % db)
   for row in cursor.fetchall():
     data_type = normalize_column_type(row[1])
-    column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], row[5])
+    max_length = None if row[6]==4294967295L else row[6] # MySQL returns 4294967295L for LONGTEXT fields
+    column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], row[5], max_length)
     columns_by_table[column.table].append(column)
   return columns_by_table
 
@@ -208,7 +213,8 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     f.null,
     f.primary_key,
     unicode(ntn),
-    f.default
+    f.default,
+    f.max_length if hasattr(f,'max_length') else None
   ) for f in defined_fields if isinstance(f, pw.Field)]
   
   existing_cols_by_name = {c.name:c for c in existing_columns}
@@ -247,6 +253,9 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
         op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
         alter_statements.append(qc.parse_node(op))
       if existing_col.data_type != defined_col.data_type and can_convert(existing_col.data_type, defined_col.data_type):
+        stmts = change_column_type(db, migrator, ntn, defined_col.name, field)
+        alter_statements += stmts
+      if existing_col.data_type == defined_col.data_type and existing_col.max_length != defined_col.max_length:
         stmts = change_column_type(db, migrator, ntn, defined_col.name, field)
         alter_statements += stmts
       if DIFF_DEFAULTS:
