@@ -17,7 +17,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.6'
+__version__ = '0.4.7'
 
 
 try:
@@ -33,7 +33,9 @@ def mark_fks_as_deferred(table_names):
     for field in model._meta.sorted_fields:
       if isinstance(field, pw.ForeignKeyField):
         add_fks.append(field)
-        field.deferred = True
+        if not field.deferred:
+          field.__pwdbev__not_deferred = True
+          field.deferred = True
   return add_fks
   
 def calc_table_changes(existing_tables):
@@ -320,6 +322,8 @@ def calc_changes(db):
   table_renamed_from = {v:k for k,v in table_renames.items()}
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
   for field in add_fks:
+    if hasattr(field, '__pwdbev__not_deferred') and field.__pwdbev__not_deferred:
+      field.deferred = False
     op = qc._create_foreign_key(field.model_class, field)
     to_run.append(qc.parse_node(op))
   for k,v in table_renames.items():
