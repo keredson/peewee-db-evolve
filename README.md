@@ -43,7 +43,7 @@ Managing your schema by writing your own migrations is kind of like managing you
 
 *How old / well vetted is this tool?*
 
-I wrote this in August 2016, but it's a port of a tool I've been using for ~10 years now.  (Called [deseb](https://github.com/keredson/deseb), funded by Google's Summer of Code project in 2006, written for Django's ORM.)  There is also a [version for Ruby on Rails](https://github.com/keredson/ruby-db-evolve), which has been used daily in production for ~1.5 years now.  (We're switching to Peewee, hence why I'm doing this port.)
+This project has been in production use since August 2016.  (We switched to Peewee as an ORM.)  But it's a style of schema management I've been using for ~10 years now.
 
 Tests
 -----
