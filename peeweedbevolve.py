@@ -152,7 +152,7 @@ def get_columns_by_table(db, schema='public'):
     raise Exception("don't know how to get columns for %s" % db)
   for row in cursor.fetchall():
     data_type = normalize_column_type(row[1])
-    max_length = None if row[6]==4294967295L else row[6] # MySQL returns 4294967295L for LONGTEXT fields
+    max_length = None if row[6]==4294967295 else row[6] # MySQL returns 4294967295L for LONGTEXT fields
     column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], row[5], max_length)
     columns_by_table[column.table].append(column)
   return columns_by_table
