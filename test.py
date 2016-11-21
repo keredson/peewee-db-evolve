@@ -17,7 +17,7 @@ class PostgreSQL(unittest.TestCase):
     os.system('dropdb peeweedbevolve_test 2> /dev/null')
 
   def setUp(self):
-    os.system('createdb peeweedbevolve_test')
+    os.system("createdb peeweedbevolve_test && psql peeweedbevolve_test -c 'create extension IF NOT EXISTS hstore;' > /dev/null 2> /dev/null")
     self.db = pwe.PostgresqlExtDatabase('peeweedbevolve_test')
     self.db.connect()
     peeweedbevolve.clear()
