@@ -241,6 +241,21 @@ class PostgreSQL(unittest.TestCase):
     with self.db.atomic() as txn:
       self.assertRaises(Exception, lambda: SomeModel.create(some_field=None))
 
+  def test_add_not_null_constraint_with_records_and_default(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create(some_field=None)
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=False, default='woot')
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+
   def test_remove_not_null_constraint(self):
     self.test_add_not_null_constraint()
     peeweedbevolve.clear()

@@ -432,12 +432,18 @@ def change_column_type(db, migrator, table_name, column_name, field):
   
 def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
+  cmds = []
+  if field.default:
+    op = pw.Clause(pw.SQL('UPDATE'), pw.Entity(table), pw.SQL('SET'), field.as_entity(), pw.SQL('='), field.default, pw.SQL('WHERE'), field.as_entity(), pw.SQL('IS NULL'))
+    cmds.append(qc.parse_node(op))
   if is_postgres(db) or is_sqlite(db):
     junk = migrator.add_not_null(table, column_name, generate=True)
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
+    cmds += normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
+    return cmds
   elif is_mysql(db):
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
-    return [qc.parse_node(op)]
+    cmds.append(qc.parse_node(op))
+    return cmds
   raise Exception('how do i add a not null for %s?' % db)
 
 def indexes_are_same(i1, i2):
