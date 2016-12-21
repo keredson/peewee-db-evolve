@@ -39,6 +39,18 @@ class PostgreSQL(unittest.TestCase):
     SomeModel.create(some_field='woot')
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_drop_table(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create(some_field='woot')
+    peeweedbevolve.clear()
+    self.evolve_and_check_noop()
+    with self.assertRaises(pw.ProgrammingError):
+      SomeModel.create(some_field='woot2') # fails because table isn't there
+
   def test_create_table_with_fk(self):
     class SomeModel(pw.Model):
       some_field = pw.CharField(null=True)
@@ -529,6 +541,51 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
+
+  def test_ignore_new_model(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+        evolve = False
+    self.evolve_and_check_noop()
+    with self.assertRaises(pw.ProgrammingError):
+      # should fail because table does not exist
+      SomeModel.create(some_field='woot')
+
+  def test_dont_drop_table(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create(some_field='woot')
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+        evolve = False
+    self.evolve_and_check_noop()
+    # doesn't fail because table is still there
+    SomeModel.create(some_field='woot2')
+
+  def test_dont_add_column(self):
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      some_other_field = pw.CharField(null=False)
+      class Meta:
+        database = self.db
+        evolve = False
+    self.evolve_and_check_noop()
+    # should not fail because the not-null column wasn't added
+    SomeModel.create(some_field='woot')
 
 
 

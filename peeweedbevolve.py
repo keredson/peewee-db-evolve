@@ -17,7 +17,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.4.9'
+__version__ = '0.5.0'
 
 
 try:
@@ -43,7 +43,7 @@ def calc_table_changes(existing_tables):
   table_names_to_models = {unicode(cls._meta.db_table):cls for cls in all_models.keys()}
   defined_tables = set(table_names_to_models.keys())
   adds = defined_tables - existing_tables
-  deletes = existing_tables - defined_tables
+  deletes = existing_tables - defined_tables - ignore_tables
   renames = {}
   for to_add in list(adds):
     cls = table_names_to_models[to_add]
@@ -573,15 +573,20 @@ def _confirm(db, to_run):
 
 
 all_models = {}
+ignore_tables = set()
 
 def register(model):
-  all_models[model] = []
+  if hasattr(model._meta, 'evolve') and not model._meta.evolve:
+    ignore_tables.add(model._meta.db_table)
+  else:
+    all_models[model] = []
 
 def unregister(model):
   del all_models[model]
 
 def clear():
   all_models.clear()
+  ignore_tables.clear()
 
 def _add_model_hook():
   init = pw.BaseModel.__init__
