@@ -11,6 +11,9 @@ except ImportError:
 import peewee as pw
 import playhouse.migrate
 
+if sys.version_info >= (3,0):
+  raw_input = input
+
 
 DEBUG = False
 
