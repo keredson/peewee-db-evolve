@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-import collections, re, sys, time
+import collections, re, sys, time, traceback
 
 try:
   import colorama
@@ -20,7 +20,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.5.1'
+__version__ = '0.5.2'
 
 
 try:
@@ -437,7 +437,11 @@ def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
   cmds = []
   if field.default:
-    op = pw.Clause(pw.SQL('UPDATE'), pw.Entity(table), pw.SQL('SET'), field.as_entity(), pw.SQL('='), field.default, pw.SQL('WHERE'), field.as_entity(), pw.SQL('IS NULL'))
+    # if default is a function, turn it into a value
+    # this won't work on columns requiring uniquiness, like UUIDs
+    # as all columns will share the same called value
+    default = field.default() if hasattr(field.default, '__call__') else field.default
+    op = pw.Clause(pw.SQL('UPDATE'), pw.Entity(table), pw.SQL('SET'), field.as_entity(), pw.SQL('='), default, pw.SQL('WHERE'), field.as_entity(), pw.SQL('IS NULL'))
     cmds.append(qc.parse_node(op))
   if is_postgres(db) or is_sqlite(db):
     junk = migrator.add_not_null(table, column_name, generate=True)
