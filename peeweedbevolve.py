@@ -20,7 +20,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.5.2'
+__version__ = '0.5.3'
 
 
 try:
@@ -110,11 +110,17 @@ def normalize_default(default):
 def can_convert(type1, type2):
   if type1=='array': return False
   return True
+
+def are_data_types_equal(db, type_a, type_b):
+  if type_a == type_b: return True
+  type_a, type_b = sorted([type_a, type_b])
+  if is_mysql(db) and type_a=='bool' and type_b=='tinyint': return True
+  return False
   
-def column_def_changed(a, b):
+def column_def_changed(db, a, b):
   return (
     a.null!=b.null or 
-    a.data_type!=b.data_type or 
+    not are_data_types_equal(db, a.data_type, b.data_type) or 
     a.max_length!=b.max_length or 
     a.primary_key!=b.primary_key or
     (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
@@ -248,7 +254,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     existing_col = existing_cols_by_name[renames_new_to_old.get(col_name, col_name)]
     defined_col = defined_cols_by_name[col_name]
     field = defined_fields_by_column_name[defined_col.name]
-    if column_def_changed(existing_col, defined_col):
+    if column_def_changed(db, existing_col, defined_col):
       len_alter_statements = len(alter_statements)
       if existing_col.null and not defined_col.null:
         alter_statements += add_not_null(db, migrator, ntn, field, defined_col.name)
@@ -436,7 +442,7 @@ def change_column_type(db, migrator, table_name, column_name, field):
 def add_not_null(db, migrator, table, field, column_name):
   qc = db.compiler()
   cmds = []
-  if field.default:
+  if field.default is not None:
     # if default is a function, turn it into a value
     # this won't work on columns requiring uniquiness, like UUIDs
     # as all columns will share the same called value
