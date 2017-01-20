@@ -118,16 +118,19 @@ def are_data_types_equal(db, type_a, type_b):
   return False
   
 def column_def_changed(db, a, b):
+  # b is the defined column
   return (
     a.null!=b.null or 
     not are_data_types_equal(db, a.data_type, b.data_type) or 
     a.max_length!=b.max_length or 
+    (b.precision is not None and a.precision!=b.precision) or 
+    (b.scale is not None and a.scale!=b.scale) or 
     a.primary_key!=b.primary_key or
     (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
   )
 
 ColumnMetadata = collections.namedtuple('ColumnMetadata', (
-  'name', 'data_type', 'null', 'primary_key', 'table', 'default', 'max_length'
+  'name', 'data_type', 'null', 'primary_key', 'table', 'default', 'max_length', 'precision', 'scale'
 ))
 
 def get_columns_by_table(db, schema='public'):
@@ -147,7 +150,9 @@ def get_columns_by_table(db, schema='public'):
           coalesce(tc.constraint_type='PRIMARY KEY',false) as primary_key, 
           c.table_name, 
           c.column_default,
-          c.character_maximum_length as max_length
+          c.character_maximum_length as max_length,
+          c.numeric_precision,
+          c.numeric_scale
         from information_schema.columns as c
         left join information_schema.key_column_usage as kcu
         on (c.table_name=kcu.table_name and c.table_schema=kcu.table_schema and c.column_name=kcu.column_name)
@@ -162,7 +167,10 @@ def get_columns_by_table(db, schema='public'):
   for row in cursor.fetchall():
     data_type = normalize_column_type(row[1])
     max_length = None if row[6]==4294967295 else row[6] # MySQL returns 4294967295L for LONGTEXT fields
-    column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], row[5], max_length)
+    default = None if row[5] is not None and row[5].startswith('nextval') else row[5]
+    precision = row[7] if data_type=='numeric' else None
+    scale = row[8] if data_type=='numeric' else None
+    column = ColumnMetadata(row[0], data_type, row[2], row[3], row[4], default, max_length, precision, scale)
     columns_by_table[column.table].append(column)
   return columns_by_table
 
@@ -223,7 +231,9 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     f.primary_key,
     unicode(ntn),
     f.default,
-    f.max_length if hasattr(f,'max_length') else None
+    f.max_length if hasattr(f,'max_length') else None,
+    f.max_digits if hasattr(f,'max_digits') else None,
+    f.decimal_places if hasattr(f,'decimal_places') else None,
   ) for f in defined_fields if isinstance(f, pw.Field)]
   
   existing_cols_by_name = {c.name:c for c in existing_columns}
@@ -264,7 +274,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
       if existing_col.data_type != defined_col.data_type and can_convert(existing_col.data_type, defined_col.data_type):
         stmts = change_column_type(db, migrator, ntn, defined_col.name, field)
         alter_statements += stmts
-      if existing_col.data_type == defined_col.data_type and existing_col.max_length != defined_col.max_length:
+      if existing_col.data_type==defined_col.data_type and (existing_col.max_length!=defined_col.max_length or (defined_col.precision is not None and existing_col.precision!=defined_col.precision) or (defined_col.scale is not None and existing_col.scale!=defined_col.scale)):
         stmts = change_column_type(db, migrator, ntn, defined_col.name, field)
         alter_statements += stmts
       if DIFF_DEFAULTS:
