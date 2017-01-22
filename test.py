@@ -1,4 +1,4 @@
-import os, unittest
+import decimal, os, unittest
 import peewee as pw
 import playhouse.postgres_ext as pwe
 import peeweedbevolve
@@ -618,6 +618,26 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     # should not fail because the not-null column wasn't added
     SomeModel.create(some_field='woot')
+
+  def test_change_decimal_precision(self):
+    class SomeModel(pw.Model):
+      some_field = pw.DecimalField(max_digits=4, decimal_places=0)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create(some_field=1234)
+    self.assertEqual(model.some_field, 1234)
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.DecimalField(max_digits=8, decimal_places=2)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, 1234)
+    model.some_field = 123456.78
+    model.save()
+    self.assertEqual(SomeModel.select().first().some_field, decimal.Decimal('123456.78'))
+
 
 
 
