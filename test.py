@@ -1,4 +1,4 @@
-import decimal, os, unittest
+import datetime, decimal, os, unittest
 import peewee as pw
 import playhouse.postgres_ext as pwe
 import peeweedbevolve
@@ -637,6 +637,16 @@ class PostgreSQL(unittest.TestCase):
     model.some_field = 123456.78
     model.save()
     self.assertEqual(SomeModel.select().first().some_field, decimal.Decimal('123456.78'))
+
+  def test_time_column(self):
+    class SomeModel(pw.Model):
+      some_field = pw.TimeField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    t = datetime.time(11,11,11)
+    SomeModel.create(some_field=t)
+    self.assertEqual(SomeModel.select().first().some_field, t)
 
 
 

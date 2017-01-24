@@ -20,7 +20,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.6.0'
+__version__ = '0.6.1'
 
 
 try:
@@ -87,6 +87,7 @@ def normalize_column_type(t):
   t = t.lower()
   if t in ['serial','int','integer auto_increment']: t = 'integer'
   if t in ['timestamp without time zone']: t = 'timestamp'
+  if t in ['time without time zone']: t = 'time'
   if t in ['character varying']: t = 'varchar'
   if _re_varchar.match(t): t = 'varchar'
   if t in ['decimal','real']: t = 'numeric'
