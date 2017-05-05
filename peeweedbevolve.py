@@ -626,7 +626,6 @@ def _add_model_hook():
     register(cls)
     init(*args, **kwargs)
   pw.BaseModel.__init__ = _init
-_add_model_hook()
 
 def _add_field_hook():
   init = pw.Field.__init__
@@ -640,7 +639,6 @@ def _add_field_hook():
       del kwargs['aka']
     init(*args, **kwargs)
   pw.Field.__init__ = _init
-_add_field_hook()
 
 def _add_fake_fk_field_hook():
   init = pw.ForeignKeyField.__init__
@@ -651,12 +649,15 @@ def _add_fake_fk_field_hook():
       del kwargs['fake']
     init(*args, **kwargs)
   pw.ForeignKeyField.__init__ = _init
-_add_fake_fk_field_hook()
-
 
 def add_evolve():
   pw.Database.evolve = evolve
-add_evolve()
+
+if 'pw' in globals():
+  _add_model_hook()
+  _add_field_hook()
+  _add_fake_fk_field_hook()
+  add_evolve()
 
 
 __all__ = ['evolve']
