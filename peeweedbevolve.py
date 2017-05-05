@@ -8,8 +8,12 @@ try:
 except ImportError:
   print('colorama not installed')
 
-import peewee as pw
-import playhouse.migrate
+try:
+  import peewee as pw
+  import playhouse.migrate
+except ImportError:
+  print('peewee or herman not installed')
+  # don't error, because setup needs to be able to run this to get the version
 
 if sys.version_info >= (3,0):
   raw_input = input
@@ -20,7 +24,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.6.1'
+__version__ = '0.6.2'
 
 
 try:
