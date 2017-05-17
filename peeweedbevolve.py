@@ -69,13 +69,13 @@ def calc_table_changes(existing_tables):
   return adds, add_fks, deletes, renames
   
 def is_postgres(db):
-  return db.__class__.__name__ in ['PostgresqlDatabase','PooledPostgresqlDatabase','PostgresqlExtDatabase']
+  return isinstance(db, pw.PostgresqlDatabase)
 
 def is_mysql(db):
-  return db.__class__.__name__ in ['MySQLDatabase']
+  return isinstance(db, pw.MySQLDatabase)
 
 def is_sqlite(db):
-  return db.__class__.__name__ in ['SqliteDatabase']
+  return isinstance(db, pw.SqliteDatabase)
 
 def auto_detect_migrator(db):
   if is_postgres(db):
