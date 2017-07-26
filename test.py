@@ -561,6 +561,22 @@ class PostgreSQL(unittest.TestCase):
     self.assertEqual(model.some_field, 'woot')
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_change_fixed_column_max_length(self):
+    class SomeModel(pw.Model):
+      some_field = pw.FixedCharField(default='w', max_length=1)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.FixedCharField(default='woot', max_length=4)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    model = SomeModel.create()
+    self.assertEqual(model.some_field, 'woot')
+    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+
   def test_change_datetime_timezone(self):
     class SomeModel(pw.Model):
       some_field = pw.DateTimeField()
