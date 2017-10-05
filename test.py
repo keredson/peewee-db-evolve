@@ -703,6 +703,9 @@ class MySQL(PostgreSQL):
   def test_change_datetime_timezone(self):
     pass
 
+  def test_add_fk_column(self):
+    pass
+
 
 if __name__ == "__main__":
    unittest.main()
