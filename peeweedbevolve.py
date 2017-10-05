@@ -479,7 +479,7 @@ def indexes_are_same(i1, i2):
   return unicode(i1.table)==unicode(i2.table) and i1.columns==i2.columns and i1.unique==i2.unique
 
 def normalize_indexes(indexes):
-  return [(unicode(idx.table), tuple(sorted([unicode(c) for c in idx.columns])), idx.unique) for idx in indexes]
+  return [(unicode(idx.table), tuple(unicode(c) for c in idx.columns), idx.unique) for idx in indexes]
 
   
 def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
