@@ -91,6 +91,7 @@ def normalize_column_type(t):
   t = t.lower()
   if t in ['serial','int','integer auto_increment']: t = 'integer'
   if t in ['timestamp without time zone']: t = 'timestamp'
+  if t in ['timestamp with time zone', 'datetime_tz']: t = 'timestamptz'
   if t in ['time without time zone']: t = 'time'
   if t in ['character varying']: t = 'varchar'
   if _re_varchar.match(t): t = 'varchar'
