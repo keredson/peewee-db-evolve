@@ -512,6 +512,8 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   return to_run
   
 def evolve(db, interactive=True):
+  if interactive:
+    print((colorama.Style.BRIGHT + colorama.Fore.RED + 'Making updates to database: {}'.format(db.database) + colorama.Style.RESET_ALL))
   to_run = calc_changes(db)
   if not to_run:
     if interactive:
