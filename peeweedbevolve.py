@@ -24,7 +24,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.6.6'
+__version__ = '0.6.7'
 
 
 try:
@@ -525,12 +525,12 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   normalized_defined_indexes = set(normalize_indexes(defined_indexes))
   to_add = normalized_defined_indexes - normalized_existing_indexes
   to_del = normalized_existing_indexes - normalized_defined_indexes
-  for index in to_add:
-    to_run.append(qc.create_index(model, [fields_by_column_name[col] for col in index[1]], index[2]))
   for index in to_del:
     index = existing_indexes_by_normalized_existing_indexes[index]
     op = migrator.drop_index(model._meta.db_table, index.name, generate=True)
     to_run.append(qc.parse_node(op))
+  for index in to_add:
+    to_run.append(qc.create_index(model, [fields_by_column_name[col] for col in index[1]], index[2]))
   return to_run
   
 def evolve(db, interactive=True):
