@@ -24,7 +24,7 @@ DEBUG = False
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.6.5'
+__version__ = '0.6.6'
 
 
 try:
@@ -228,6 +228,28 @@ def get_foreign_keys_by_table(db, schema='public'):
     fks_by_table[fk.table].append(fk)
   return fks_by_table
 
+def get_indexes_by_table(db, table, schema='public'):
+  # peewee's get_indexes returns the columns in an index in arbitrary order
+  if is_postgres(db):
+    query = '''
+      select index_class.relname,
+        idxs.indexdef,
+        array_agg(table_attribute.attname order by array_position(index.indkey, table_attribute.attnum)),
+        index.indisunique,
+        table_class.relname
+      from pg_catalog.pg_class index_class
+      join pg_catalog.pg_index index on index_class.oid = index.indexrelid
+      join pg_catalog.pg_class table_class on table_class.oid = index.indrelid
+      join pg_catalog.pg_attribute table_attribute on table_class.oid = table_attribute.attrelid and table_attribute.attnum = any(index.indkey)
+      join pg_catalog.pg_indexes idxs on idxs.tablename = table_class.relname and idxs.indexname = index_class.relname
+      where table_class.relname = %s and table_class.relkind = %s and idxs.schemaname = %s
+      group by index_class.relname, idxs.indexdef, index.indisunique, table_class.relname;
+    '''
+    cursor = db.execute_sql(query, (table, 'r', schema))
+    return [pw.IndexMetadata(*row) for row in cursor.fetchall()]
+  else:
+    return db.get_indexes(table, schema=schema)
+
 def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
   qc = db.compiler()
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
@@ -344,7 +366,7 @@ def calc_changes(db):
     migrator = auto_detect_migrator(db)
     
   existing_tables = [unicode(t) for t in db.get_tables()]
-  existing_indexes = {table:db.get_indexes(table) for table in existing_tables}
+  existing_indexes = {table:get_indexes_by_table(db, table) for table in existing_tables}
   existing_columns_by_table = get_columns_by_table(db)
   foreign_keys_by_table = get_foreign_keys_by_table(db)
 
