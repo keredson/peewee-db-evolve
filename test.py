@@ -28,6 +28,9 @@ class PostgreSQL(unittest.TestCase):
   
   def evolve_and_check_noop(self):
     self.db.evolve(interactive=INTERACTIVE)
+    self.check_noop()
+
+  def check_noop(self):
     self.assertEqual(peeweedbevolve.calc_changes(self.db), [])
 
   def test_create_table(self):
@@ -684,6 +687,30 @@ class PostgreSQL(unittest.TestCase):
     t = datetime.time(11,11,11)
     SomeModel.create(some_field=t)
     self.assertEqual(SomeModel.select().first().some_field, t)
+
+  def test_ignore_table(self):
+    class SomeModel(pw.Model):
+      some_field = pw.TimeField(null=True)
+      class Meta:
+        database = self.db
+        evolve = False
+    self.check_noop()
+
+  def test_ignore_table_evolve_command(self):
+    class SomeModel(pw.Model):
+      some_field = pw.TimeField(null=True)
+      class Meta:
+        database = self.db
+    self.assertEqual(peeweedbevolve.calc_changes(self.db, ignore_tables=['somemodel']), [])
+
+  def test_ignore_existing_table_evolve_command(self):
+    class SomeModel(pw.Model):
+      some_field = pw.TimeField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    peeweedbevolve.clear()
+    self.assertEqual(peeweedbevolve.calc_changes(self.db, ignore_tables=['somemodel']), [])
 
 
 

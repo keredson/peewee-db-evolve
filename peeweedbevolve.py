@@ -45,11 +45,15 @@ def mark_fks_as_deferred(table_names):
           field.deferred = True
   return add_fks
   
-def calc_table_changes(existing_tables):
+def calc_table_changes(existing_tables, ignore_tables=None):
+  if ignore_tables:
+    ignore_tables = set(ignore_tables) | globals()['ignore_tables']
+  else:
+    ignore_tables = globals()['ignore_tables']
   existing_tables = set(existing_tables)
   table_names_to_models = {unicode(cls._meta.db_table):cls for cls in all_models.keys()}
   defined_tables = set(table_names_to_models.keys())
-  adds = defined_tables - existing_tables
+  adds = defined_tables - existing_tables - ignore_tables
   deletes = existing_tables - defined_tables - ignore_tables
   renames = {}
   for to_add in list(adds):
@@ -360,7 +364,7 @@ def alter_add_column(db, migrator, ntn, column_name, field):
     to_run.append(qc.parse_node(op))
   return to_run
 
-def calc_changes(db):
+def calc_changes(db, ignore_tables=None):
   migrator = None # expose eventually?
   if migrator is None:
     migrator = auto_detect_migrator(db)
@@ -375,7 +379,7 @@ def calc_changes(db):
   qc = db.compiler()
   to_run = []
 
-  table_adds, add_fks, table_deletes, table_renames = calc_table_changes(existing_tables)
+  table_adds, add_fks, table_deletes, table_renames = calc_table_changes(existing_tables, ignore_tables=ignore_tables)
   table_renamed_from = {v:k for k,v in table_renames.items()}
   to_run += [qc.create_table(table_names_to_models[tbl]) for tbl in table_adds]
   for field in add_fks:
@@ -533,10 +537,10 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
     to_run.append(qc.create_index(model, [fields_by_column_name[col] for col in index[1]], index[2]))
   return to_run
   
-def evolve(db, interactive=True):
+def evolve(db, interactive=True, ignore_tables=None):
   if interactive:
     print((colorama.Style.BRIGHT + colorama.Fore.RED + 'Making updates to database: {}'.format(db.database) + colorama.Style.RESET_ALL))
-  to_run = calc_changes(db)
+  to_run = calc_changes(db, ignore_tables=ignore_tables)
   if not to_run:
     if interactive:
       print('Nothing to do... Your database is up to date!')
