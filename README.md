@@ -45,6 +45,10 @@ Managing your schema by writing your own migrations is kind of like managing you
 
 This project has been in production use since August 2016.  (We switched to Peewee as an ORM.)  But it's a style of schema management I've been using for ~10 years now.
 
+*How can I prevent `peewee-db-evolve` from evolving a specific table or class?*
+
+In the class' `Meta` class, add `evolve = False` and `peewee-db-evolve` will ignore it.  If you don't have a class for a specific table, just make a do-nothing dummy class for it.
+
 Tests
 -----
 
