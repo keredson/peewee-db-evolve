@@ -10,6 +10,7 @@ import playhouse.migrate
 
 
 DEBUG = False
+PW3 = not hasattr(pw,'Clause')
 
 __version__ = '0.2.1'
 
@@ -22,7 +23,8 @@ except NameError:
 
 def sort_by_fk_deps(table_names):
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys() if cls._meta.db_table in table_names}
-  models = pw.sort_models_topologically(table_names_to_models.values())
+  sort_models_topologically = pw.sort_models_topologically if hasattr(pw,'sort_models_topologically') else pw.sort_models
+  models = sort_models_topologically(table_names_to_models.values())
   return [model._meta.db_table for model in models]
   
 def calc_table_changes(existing_tables):
@@ -69,7 +71,7 @@ def auto_detect_migrator(db):
 _re_varchar = re.compile('^varchar[(]\\d+[)]$')
 def normalize_column_type(t):
   t = t.lower()
-  if t in ['serial','primary_key','int']: t = 'integer'
+  if t in ['serial','primary_key','int','auto']: t = 'integer'
   if t in ['character varying','varchar']: t = 'string'
   if t in ['timestamp', 'timestamp with time zone', 'timestamp without time zone']: t = 'datetime'
   if t in ['double precision','numeric','decimal']: t = 'float'
@@ -79,7 +81,7 @@ def normalize_column_type(t):
   
 def normalize_field_type(field):
 #  t = field.get_column_type()
-  t = field.db_field
+  t = field.db_field if hasattr(field,'db_field') else field.field_type
   return normalize_column_type(t)
   
 def can_convert(type1, type2):
@@ -136,7 +138,7 @@ def get_foreign_keys_by_table(db, schema='public'):
   return fks_by_table
 
 def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields, existing_fks):
-  qc = db.compiler()
+  qc = get_compiler(db)
   defined_fields_by_column_name = {unicode(f.db_column):f for f in defined_fields}
   existing_columns = [pw.ColumnMetadata(c.name, normalize_column_type(c.data_type), c.null, c.primary_key, c.table) for c in existing_columns]
   defined_columns = [pw.ColumnMetadata(
@@ -212,13 +214,36 @@ def drop_foreign_key(db, migrator, table_name, fk_name):
   return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
 
 def alter_add_column(db, migrator, ntn, column_name, field):
-  qc = db.compiler()
+  qc = get_compiler(db)
   operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
   to_run = [qc.parse_node(operation)]
   if is_mysql(db) and isinstance(field, pw.ForeignKeyField):
     op = qc._create_foreign_key(field.model_class, field)
     to_run.append(qc.parse_node(op))
   return to_run
+
+class FakeCompiler(object):
+
+  def __init__(self, db):
+    self.db = db
+    
+  def create_table(self, model):
+    sm = pw.SchemaManager(model)
+    ctx = sm._create_table()
+    return ''.join(ctx._sql), ctx._values
+  
+  def parse_node(self, node):
+    print('node', node)
+    x = pw.Context().parse(node)
+    print(x)
+    return x
+    
+
+def get_compiler(db):
+  if hasattr(db,'compiler'):
+    return db.compiler()
+  else:
+    return FakeCompiler(db)
 
 def calc_changes(db):
   migrator = None # expose eventually?
@@ -232,7 +257,8 @@ def calc_changes(db):
 
   table_names_to_models = {cls._meta.db_table:cls for cls in all_models.keys()}
 
-  qc = db.compiler()
+  qc = get_compiler(db)
+  qc = get_compiler(db)
   to_run = []
 
   table_adds, table_deletes, table_renames = calc_table_changes(existing_tables)
@@ -293,7 +319,7 @@ def calc_changes(db):
   return to_run
 
 def rename_column(db, migrator, ntn, ocn, ncn, field):
-  qc = db.compiler()
+  qc = get_compiler(db)
   if is_mysql(db):
     junk = pw.Clause(
       pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), qc.field_definition(field)
@@ -302,12 +328,38 @@ def rename_column(db, migrator, ntn, ocn, ncn, field):
     junk = migrator.rename_column(ntn, ocn, ncn, generate=True)
   return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
 
+
 def normalize_op_to_clause(db, migrator, op):
-  if isinstance(op, pw.Clause): return op
+  print('op',op)
+  playhouse.migrate
+  if PW3:
+    kwargs = op.kwargs.copy()
+    kwargs['with_context'] = True
+    if 'generate' in kwargs:
+      del kwargs['generate']
+    ret = getattr(migrator, op.method)(*op.args, **kwargs)
+  else:
+    if isinstance(op, pw.Clause): return op
+    kwargs = op.kwargs.copy()
+    kwargs['generate'] = True
+    ret = getattr(migrator, op.method)(*op.args, **kwargs)
+  return ret
+  
+def xnormalize_op_to_clause(db, migrator, op):
+  print('op',op)
+  if hasattr(pw,'Clause') and isinstance(op, pw.Clause): return op
   playhouse.migrate
   kwargs = op.kwargs.copy()
   kwargs['generate'] = True
   ret = getattr(migrator, op.method)(*op.args, **kwargs)
+  if hasattr(playhouse.migrate, 'Operation') and isinstance(ret, playhouse.migrate.Operation):
+    method = getattr(ret.migrator, ret.method)
+    kwargs = ret.kwargs.copy()
+    kwargs['with_context'] = True
+    print('method',method, ret.args, ret.kwargs)
+    ret = method(*ret.args, **kwargs)
+#    self._handle_result(method(*self.args, **kwargs))    
+  print('ret', ret)
   return ret
 
 def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
@@ -316,7 +368,8 @@ def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
   if not hasattr(junk, '__iter__'):
     junk = [junk]
   junk = [normalize_op_to_clause(db, migrator, o) for o in junk]
-  qc = db.compiler()
+  print('junk', junk)
+  qc = get_compiler(db)
   junk = [qc.parse_node(clause) for clause in junk]
   return junk
 
@@ -324,7 +377,7 @@ def drop_column(db, migrator, ntn, column_name):
   return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, migrator.drop_column(ntn, column_name, generate=True, cascade=False))
   
 def add_not_null(db, migrator, table, field, column_name):
-  qc = db.compiler()
+  qc = get_compiler(db)
   if is_postgres(db) or is_sqlite(db):
     junk = migrator.add_not_null(table, column_name, generate=True)
     return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
@@ -341,7 +394,7 @@ def normalize_indexes(indexes):
 
   
 def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
-  qc = db.compiler()  
+  qc = get_compiler(db)  
   to_run = []
   fields = list(model._meta.sorted_fields)
   fields_by_column_name = {f.db_column:f for f in fields}
@@ -350,7 +403,7 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   normalized_existing_indexes = normalize_indexes(existing_indexes)
   existing_indexes_by_normalized_existing_indexes = dict(zip(normalized_existing_indexes, existing_indexes))
   normalized_existing_indexes = set(normalized_existing_indexes)
-  defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in model._fields_to_index()]
+  defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in (model._fields_to_index() if hasattr(model,'_fields_to_index') else model._meta.fields_to_index())]
   for fields, unique in model._meta.indexes:
     try:
       columns = [model._meta.fields[fname].db_column for fname in fields]
@@ -438,7 +491,11 @@ def _confirm(db, to_run):
   print()
   while True:
     print('Do you want to run %s? (%s)' % (('these commands' if len(to_run)>1 else 'this command'), ('type yes, no or test' if is_postgres(db) else 'yes or no')), end=' ')
-    response = raw_input().strip().lower()
+    try:
+      response = raw_input()
+    except NameError:
+      response = input()
+    response = response.strip().lower()
     if response=='yes' or (is_postgres(db) and response=='test'):
       break
     if response=='no':
@@ -458,6 +515,12 @@ all_models = {}
 
 def register(model):
   all_models[model] = []
+  if hasattr(model._meta, 'table_name') and not hasattr(model._meta, 'db_table'):
+    model._meta.db_table = model._meta.table_name
+  for field in model._meta.sorted_fields:
+    if hasattr(field, 'column_name') and not hasattr(field, 'db_column'):
+      field.db_column = field.column_name
+  
 
 def unregister(model):
   del all_models[model]
@@ -466,7 +529,8 @@ def clear():
   all_models.clear()
 
 def _add_model_hook():
-  init = pw.BaseModel.__init__
+  BaseModel = pw.BaseModel if hasattr(pw, 'BaseModel') else pw.ModelBase
+  init = BaseModel.__init__
   def _init(*args, **kwargs):
     cls = args[0]
     fields = args[3]
@@ -474,7 +538,7 @@ def _add_model_hook():
       del fields['__module__']
     register(cls)
     init(*args, **kwargs)
-  pw.BaseModel.__init__ = _init
+  BaseModel.__init__ = _init
 _add_model_hook()
 
 def _add_field_hook():
