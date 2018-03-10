@@ -226,16 +226,30 @@ class FakeCompiler(object):
 
   def __init__(self, db):
     self.db = db
+    self.sm = auto_detect_migrator(db)
     
   def create_table(self, model):
     sm = pw.SchemaManager(model)
     ctx = sm._create_table()
     return ''.join(ctx._sql), ctx._values
   
+  def create_index(self, model, fields, unique):
+    sm = pw.SchemaManager(model)
+    ctx = sm._create_index(pw.ModelIndex(model, fields, unique=unique))
+    return ''.join(ctx._sql), ctx._values
+  
   def parse_node(self, node):
-    print('node', node)
-    x = pw.Context().parse(node)
-    print(x)
+    print('node', node.__dict__, node.__class__.__name__)
+    if node.__class__.__name__=='Operation':
+      kwargs = node.kwargs.copy()
+      kwargs['with_context'] = True
+      del kwargs['generate']
+      method = getattr(node.migrator, node.method)
+      x = method(*node.args, **kwargs)
+      return ''.join(x._sql), x._values
+    else:
+      x = pw.Context().parse(node)
+    print('x',  x)
     return x
     
 
@@ -403,7 +417,10 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
   normalized_existing_indexes = normalize_indexes(existing_indexes)
   existing_indexes_by_normalized_existing_indexes = dict(zip(normalized_existing_indexes, existing_indexes))
   normalized_existing_indexes = set(normalized_existing_indexes)
-  defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in (model._fields_to_index() if hasattr(model,'_fields_to_index') else model._meta.fields_to_index())]
+  if hasattr(model,'_fields_to_index'):
+    defined_indexes = [pw.IndexMetadata('', '', [f.db_column], f.unique, model._meta.db_table) for f in model._fields_to_index()]
+  else:
+    defined_indexes = [pw.IndexMetadata('', '', [f._expressions[0].column_name], f._unique, model._meta.db_table) for f in model._meta.fields_to_index()]
   for fields, unique in model._meta.indexes:
     try:
       columns = [model._meta.fields[fname].db_column for fname in fields]

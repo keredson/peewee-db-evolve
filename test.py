@@ -45,7 +45,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
     class SomeModel2(pw.Model):
       some_field2 = pw.CharField(null=True)
-      some_model = pw.ForeignKeyField(rel_model=SomeModel)
+      some_model = pw.ForeignKeyField(model=SomeModel)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -62,7 +62,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = pw.ForeignKeyField(model=Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -74,7 +74,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = pw.ForeignKeyField(model=Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -99,7 +99,7 @@ class PostgreSQL(unittest.TestCase):
     car = Car.create(owner_id=person.id)
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = pw.ForeignKeyField(model=Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -111,7 +111,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = pw.ForeignKeyField(model=Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -404,7 +404,7 @@ class PostgreSQL(unittest.TestCase):
     car = Car.create(owner_id=-1)
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False, fake=True)
+      owner = pw.ForeignKeyField(model=Person, null=False, fake=True)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
