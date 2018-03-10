@@ -200,7 +200,7 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
     defined_field = defined_fields_by_column_name[col_name]
     existing_fk = existing_fks_by_column.get(existing_column_name)
     if isinstance(defined_field, pw.ForeignKeyField) and not existing_fk and not (hasattr(defined_field,'fake') and defined_field.fake):
-      op = qc._create_foreign_key(defined_field.model_class, defined_field)
+      op = qc._create_foreign_key(defined_field.model_class if hasattr(defined_field,'model_class') else defined_field.model, defined_field)
       alter_statements.append(qc.parse_node(op))
     if not isinstance(defined_field, pw.ForeignKeyField) and existing_fk:
       alter_statements += drop_foreign_key(db, migrator, ntn, existing_fk.name)
@@ -210,17 +210,27 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
 
 def drop_foreign_key(db, migrator, table_name, fk_name):
   drop_stmt = 'drop foreign key' if is_mysql(db) else 'DROP CONSTRAINT'
-  op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
-  return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+  if hasattr(pw, 'Clause'):
+    op = Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
+    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+  else:
+    return [('ALTER TABLE "%s" %s "%s"' % (table_name, drop_stmt, fk_name), [])]
+    
 
 def alter_add_column(db, migrator, ntn, column_name, field):
   qc = get_compiler(db)
   operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
   to_run = [qc.parse_node(operation)]
   if is_mysql(db) and isinstance(field, pw.ForeignKeyField):
-    op = qc._create_foreign_key(field.model_class, field)
+    op = qc._create_foreign_key(field.model_class if hasattr(field,'model_class') else field.model, field)
     to_run.append(qc.parse_node(op))
   return to_run
+
+class FakeClause(object):
+  def __init__(self, *args):
+    self.args = args
+
+Clause = Clause if hasattr(pw, 'Clause') else FakeClause
 
 class FakeCompiler(object):
 
@@ -238,19 +248,37 @@ class FakeCompiler(object):
     ctx = sm._create_index(pw.ModelIndex(model, fields, unique=unique))
     return ''.join(ctx._sql), ctx._values
   
+  def _create_foreign_key(self, model, field):
+    sm = pw.SchemaManager(model)
+    ctx = sm._create_foreign_key(field)
+    return ''.join(ctx._sql), ctx._values
+  
+  def _parse_operation(self, op):
+    kwargs = op.kwargs.copy()
+    kwargs['with_context'] = True
+    if 'generate' in kwargs: del kwargs['generate']
+    method = getattr(op.migrator, op.method)
+    x = method(*op.args, **kwargs)
+    print('x2', x)
+    if isinstance(x, pw.Context):
+      return ''.join(x._sql), x._values
+    for y in x:
+      if isinstance(y, pw.Context):
+        return ''.join(y._sql), y._values
+#    return self._parse_operation(x[1])
+  
   def parse_node(self, node):
+    if isinstance(node,tuple): return node
     print('node', node.__dict__, node.__class__.__name__)
     if node.__class__.__name__=='Operation':
-      kwargs = node.kwargs.copy()
-      kwargs['with_context'] = True
-      del kwargs['generate']
-      method = getattr(node.migrator, node.method)
-      x = method(*node.args, **kwargs)
-      return ''.join(x._sql), x._values
+      return self._parse_operation(node)
+    elif isinstance(node, Clause):
+      ctx = pw.Context()
+      for arg in node.args:
+        arg.__sql__(ctx)
+      return ' '.join(ctx._sql), ctx._values
     else:
-      x = pw.Context().parse(node)
-    print('x',  x)
-    return x
+      return pw.Context().parse(node)
     
 
 def get_compiler(db):
@@ -329,13 +357,13 @@ def calc_changes(db):
 
   
   
-  to_run += [qc.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
+  to_run += [qc.parse_node(Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl))) for tbl in table_deletes]
   return to_run
 
 def rename_column(db, migrator, ntn, ocn, ncn, field):
   qc = get_compiler(db)
   if is_mysql(db):
-    junk = pw.Clause(
+    junk = Clause(
       pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), qc.field_definition(field)
     )
   else:
@@ -353,7 +381,7 @@ def normalize_op_to_clause(db, migrator, op):
       del kwargs['generate']
     ret = getattr(migrator, op.method)(*op.args, **kwargs)
   else:
-    if isinstance(op, pw.Clause): return op
+    if isinstance(op, Clause): return op
     kwargs = op.kwargs.copy()
     kwargs['generate'] = True
     ret = getattr(migrator, op.method)(*op.args, **kwargs)
@@ -361,7 +389,7 @@ def normalize_op_to_clause(db, migrator, op):
   
 def xnormalize_op_to_clause(db, migrator, op):
   print('op',op)
-  if hasattr(pw,'Clause') and isinstance(op, pw.Clause): return op
+  if hasattr(pw,'Clause') and isinstance(op, Clause): return op
   playhouse.migrate
   kwargs = op.kwargs.copy()
   kwargs['generate'] = True
@@ -396,7 +424,7 @@ def add_not_null(db, migrator, table, field, column_name):
     junk = migrator.add_not_null(table, column_name, generate=True)
     return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
   elif is_mysql(db):
-    op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
+    op = Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
     return [qc.parse_node(op)]
   raise Exception('how do i add a not null for %s?' % db)
 
