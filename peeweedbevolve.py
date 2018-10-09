@@ -125,6 +125,7 @@ if PW3:
     return extract_query_from_migration(migration)
 
   def drop_column(db, migrator, table, column_name):
+    migrator.explicit_delete_foreign_key = False
     migration = migrator.drop_column(table, column_name, cascade=False, with_context=True)
     return extract_query_from_migration(migration)
 
@@ -159,7 +160,7 @@ if PW3:
     ]
 
 else:
-  def normalize_op_to_clause(db, migrator, op):
+  def normalize_op_to_clause(migrator, op):
     if isinstance(op, pw.Clause): return op
     playhouse.migrate
     kwargs = op.kwargs.copy()
@@ -173,77 +174,82 @@ else:
   def _column_name(cls):
     return cls.db_column
 
-  def _field_type(cls):
-    compiler = field.database.compiler()
+  def _field_type(field):
+    compiler = field.model_class._meta.database.compiler()
     return compiler.get_column_type(field.get_db_field())
 
   def _is_foreign_key(field):
     return isinstance(field, pw.ForeignKeyField)
 
   def create_table(cls):
-    compiler = cls.database.compiler()
-    return ompiler.parse_node(compiler.create_table(cls))
+    compiler = cls._meta.database.compiler()
+    return [compiler.create_table(cls)]
 
-  def rename_table(migrator, before, after, generate=True):
-    ops = migrator.rename_table(before, after, generate)
-    if not hasattr(ops, '__iter__'): ops = [ops] # sometimes pw return arrays, sometimes not
-    return [qc.parse_node(op) for op in ops]
+  def rename_table(migrator, before, after):
+    compiler = migrator.database.compiler()
+    op = migrator.rename_table(before, after, generate=True)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
-  def drop_table(migrator, tbl):
-    compiler = field.database.compiler()
-    return compiler.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(tbl)))
+  def drop_table(migrator, table_name):
+    compiler = migrator.database.compiler()
+    return [compiler.parse_node(pw.Clause(pw.SQL('DROP TABLE'), pw.Entity(table_name)))]
 
   def create_index(model, fields, name):
-    compiler = model.database.compiler()
-    return qc.create_index(model, fields, name)
+    compiler = model._meta.database.compiler()
+    return [compiler.create_index(model, fields, name)]
 
   def drop_index(migrator, model, index):
-    compiler = model.database.compiler()
-    return qc.drop_index(model, fields, name)
+    compiler = migrator.database.compiler()
+    op = migrator.drop_index(_table_name(model), index.name, generate=True)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def create_foreign_key(field):
-    compiler = field.database.compiler()
-    return compiler.parse_node(compiler.create_foreign_key(field.model_class, field))
+    compiler = field.model_class._meta.database.compiler()
+    return [compiler.create_foreign_key(field.model_class, field)]
 
   def drop_foreign_key(db, migrator, table_name, fk_name):
     drop_stmt = 'drop foreign key' if is_mysql(db) else 'DROP CONSTRAINT'
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL(drop_stmt), pw.Entity(fk_name))
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def drop_default(db, migrator, table_name, column_name, field):
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER COLUMN'), pw.Entity(column_name), pw.SQL('DROP DEFAULT'))
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def set_default(db, migrator, table_name, column_name, field):
     default = field.default
     if callable(default): default = default()
     param = pw.Param(field.db_value(default))
     op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('ALTER COLUMN'), pw.Entity(column_name), pw.SQL('SET DEFAULT'), param)
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def alter_add_column(db, migrator, ntn, column_name, field):
+    compiler = migrator.database.compiler()
     operation = migrator.alter_add_column(ntn, column_name, field, generate=True)
-    to_run = [qc.parse_node(operation)]
+    to_run = normalize_whatever_junk_peewee_migrations_gives_you(migrator, operation)
     if is_mysql(db) and _is_foreign_key(field):
       to_run += create_foreign_key(field)
     return to_run
 
   def drop_not_null(migrator, ntn, defined_col):
-    qc = migrator.database.compiler()
+    compiler = migrator.database.compiler()
     op = migrator.drop_not_null(ntn, defined_col.name, generate=True)
-    return [qc.parse_node(op)]
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def rename_column(db, migrator, ntn, ocn, ncn, field):
+    compiler = db.compiler()
     if is_mysql(db):
       junk = pw.Clause(
-        pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), qc.field_definition(field)
+        pw.SQL('ALTER TABLE'), pw.Entity(ntn), pw.SQL('CHANGE'), pw.Entity(ocn), compiler.field_definition(field)
       )
     else:
       junk = migrator.rename_column(ntn, ocn, ncn, generate=True)
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, junk)
 
   def drop_column(db, migrator, ntn, column_name):
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, migrator.drop_column(ntn, column_name, generate=True, cascade=False))
+    migrator.explicit_delete_foreign_key = False
+    op = migrator.drop_column(ntn, column_name, generate=True, cascade=False)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
   def change_column_type(db, migrator, table_name, column_name, field):
     column_type = _field_type(field)
@@ -253,38 +259,40 @@ else:
       op = pw.Clause(*[pw.SQL('ALTER TABLE'), pw.Entity(table_name), pw.SQL('MODIFY')] + field.__ddl__(column_type))
     else:
       raise Exception('how do i change a column type for %s?' % db)
-    return normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, op)
+    return normalize_whatever_junk_peewee_migrations_gives_you(migrator, op)
 
-  def normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk):
+  def normalize_whatever_junk_peewee_migrations_gives_you(migrator, junk):
     # sometimes a clause, sometimes an operation, sometimes a list mixed with clauses and operations
     # turn it into a list of (sql,params) tuples
+    compiler = migrator.database.compiler()
     if not hasattr(junk, '__iter__'):
       junk = [junk]
-    junk = [normalize_op_to_clause(db, migrator, o) for o in junk]
-    junk = [qc.parse_node(clause) for clause in junk]
+    junk = [normalize_op_to_clause(migrator, o) for o in junk]
+    junk = [compiler.parse_node(clause) for clause in junk]
     return junk
 
   def add_not_null(db, migrator, table, column_name, field):
     cmds = []
+    compiler = db.compiler()
     if field.default is not None:
       # if default is a function, turn it into a value
       # this won't work on columns requiring uniquiness, like UUIDs
       # as all columns will share the same called value
       default = field.default() if hasattr(field.default, '__call__') else field.default
       op = pw.Clause(pw.SQL('UPDATE'), pw.Entity(table), pw.SQL('SET'), field.as_entity(), pw.SQL('='), default, pw.SQL('WHERE'), field.as_entity(), pw.SQL('IS NULL'))
-      cmds.append(qc.parse_node(op))
+      cmds.append(compiler.parse_node(op))
     if is_postgres(db) or is_sqlite(db):
       junk = migrator.add_not_null(table, column_name, generate=True)
-      cmds += normalize_whatever_junk_peewee_migrations_gives_you(db, migrator, junk)
+      cmds += normalize_whatever_junk_peewee_migrations_gives_you(migrator, junk)
       return cmds
     elif is_mysql(db):
-      op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), qc.field_definition(field))
-      cmds.append(qc.parse_node(op))
+      op = pw.Clause(pw.SQL('ALTER TABLE'), pw.Entity(table), pw.SQL('MODIFY'), compiler.field_definition(field))
+      cmds.append(compiler.parse_node(op))
       return cmds
     raise Exception('how do i add a not null for %s?' % db)
 
   def indexes_on_model(model):
-    return [pw.IndexMetadata('', '', [_column_name(f)], f.unique, _table_name(model)) for f in model._fields_to_index]
+    return [pw.IndexMetadata('', '', [_column_name(f)], f.unique, _table_name(model)) for f in model._fields_to_index()]
 
 ####
 
