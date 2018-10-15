@@ -645,7 +645,7 @@ def calc_changes(db, ignore_tables=None):
         # alter_add_column strips null constraints
         # add them back after setting any defaults
         if field.default is not None:
-          to_run += set_default(migrator, ntn, column_name, field, generate=True)
+          to_run += set_default(db, migrator, ntn, column_name, field)
         else:
           to_run.append(('-- adding a not null column without a default will fail if the table is not empty',[]))
         to_run += add_not_null(db, migrator, ntn, column_name, field)

@@ -316,6 +316,21 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_add_columns_with_false_defaults(self):
+    class SomeModel(pw.Model):
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create(some_field=None)
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.BooleanField(null=False, default=False)
+      created_at = pw.DateTimeField(default=datetime.datetime.now)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, False)
+
   def test_remove_not_null_constraint(self):
     self.test_add_not_null_constraint()
     peeweedbevolve.clear()
