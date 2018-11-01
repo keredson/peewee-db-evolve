@@ -29,7 +29,7 @@ PW3 = not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '0.6.8'
+__version__ = '3.7.0'
 
 
 try:
