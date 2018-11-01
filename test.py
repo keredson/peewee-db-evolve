@@ -8,6 +8,19 @@ import peeweedbevolve
 # turn on for debugging individual test cases
 INTERACTIVE = False
 
+PW3 = not hasattr(pw, 'Clause')
+def foreign_key(model, **kwargs):
+  if PW3:
+    return pw.ForeignKeyField(model=model, **kwargs)
+  else:
+    return pw.ForeignKeyField(rel_model=model, **kwargs)
+
+if PW3:
+  DeferredForeignKey = pw.DeferredForeignKey
+else:
+  def DeferredForeignKey(*args):
+    pw.ForeignKeyField(pw.DeferredRelation(*args))
+
 
 
 class PostgreSQL(unittest.TestCase):
@@ -25,7 +38,7 @@ class PostgreSQL(unittest.TestCase):
   def tearDown(self):
     self.db.close()
     os.system('dropdb peeweedbevolve_test')
-  
+
   def evolve_and_check_noop(self):
     self.db.evolve(interactive=INTERACTIVE)
     self.check_noop()
@@ -61,7 +74,7 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
     class SomeModel2(pw.Model):
       some_field2 = pw.CharField(null=True)
-      some_model = pw.ForeignKeyField(rel_model=SomeModel)
+      some_model = foreign_key(SomeModel)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -78,7 +91,7 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = foreign_key(Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -90,7 +103,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = foreign_key(Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -115,7 +128,7 @@ class PostgreSQL(unittest.TestCase):
     car = Car.create(owner_id=person.id)
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = foreign_key(Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -127,7 +140,7 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False)
+      owner = foreign_key(Person, null=False)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
@@ -303,6 +316,21 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
+  def test_add_columns_with_false_defaults(self):
+    class SomeModel(pw.Model):
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    SomeModel.create(some_field=None)
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.BooleanField(null=False, default=False)
+      created_at = pw.DateTimeField(default=datetime.datetime.now)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().some_field, False)
+
   def test_remove_not_null_constraint(self):
     self.test_add_not_null_constraint()
     peeweedbevolve.clear()
@@ -337,7 +365,7 @@ class PostgreSQL(unittest.TestCase):
     self.assertEqual(SomeOtherModel.select().first().some_other_field, 'woot')
     with self.db.atomic() as txn:
       self.assertRaises(Exception, lambda: SomeOtherModel.create(some_other_field=None))
-  
+
   def test_add_index(self):
     self.test_create_table()
     peeweedbevolve.clear()
@@ -488,14 +516,14 @@ class PostgreSQL(unittest.TestCase):
     car = Car.create(owner_id=-1)
     peeweedbevolve.unregister(Car)
     class Car(pw.Model):
-      owner = pw.ForeignKeyField(rel_model=Person, null=False, fake=True)
+      owner = foreign_key(Person, null=False, fake=True)
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
     person = Person.create()
     car = Car.create(owner=-2)
     self.assertEqual(Car.select().count(), 2)
-    
+
   def test_add_column_default(self):
     self.test_create_table()
     peeweedbevolve.clear()
@@ -560,7 +588,7 @@ class PostgreSQL(unittest.TestCase):
 
   def test_circular_deps(self):
     class SomeModel(pw.Model):
-      some_model2 = pw.ForeignKeyField(pw.DeferredRelation('SomeModel2'))
+      some_model2 = DeferredForeignKey('SomeModel2')
       class Meta:
         database = self.db
     class SomeModel2(pw.Model):
@@ -756,5 +784,5 @@ class MySQL(PostgreSQL):
 
 
 if __name__ == "__main__":
-   unittest.main()
+   unittest.main(failfast=False)
 
