@@ -47,7 +47,7 @@ This project has been in production use since August 2016.  (We switched to Peew
 
 *How can I prevent `peewee-db-evolve` from evolving a specific table or class?*
 
-In the class' `Meta` class, add `evolve = False` and `peewee-db-evolve` will ignore it.  If you don't have a class for a specific table, just make a do-nothing dummy class for it.
+In the class' `Meta` class, add `evolve = False` and `peewee-db-evolve` will ignore it.  If you don't have a class for a specific table, just make a do-nothing dummy class for it.  Or you can pass in any iterable into the `ignore_tables` kwarg of `evolve()`.
 
 Tests
 -----
