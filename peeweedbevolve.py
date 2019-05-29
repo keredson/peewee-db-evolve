@@ -610,7 +610,7 @@ def calc_column_changes(db, migrator, ntn, existing_columns, defined_fields, exi
             for aka in field.akas:
                 if aka in delete_cols:
                     ec = existing_cols_by_name[aka]
-                    if can_convert(sc.data_type, ec.data_type):
+                    if can_convert(sc.data_type):
                         rename_cols[ec.name] = sc.name
                         new_cols.discard(cn)
                         delete_cols.discard(aka)
