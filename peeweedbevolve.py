@@ -24,12 +24,12 @@ else:
 
 
 DEBUG = False
-PW3 = not hasattr(pw, 'Clause')
+PW3 = 'pw' in globals() and not hasattr(pw, 'Clause')
 
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.1'
+__version__ = '3.7.2'
 
 
 try:
