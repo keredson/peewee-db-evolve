@@ -29,7 +29,7 @@ PW3 = not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.0'
+__version__ = '3.7.1'
 
 
 try:
@@ -365,6 +365,7 @@ def normalize_column_type(t):
   if _re_varchar.match(t): t = 'varchar'
   if t in ['decimal', 'real', 'float']: t = 'numeric'
   if t in ['boolean']: t = 'bool'
+  if t in ['bytea']: t = 'blob'
   return unicode(t)
 
 

@@ -90,3 +90,5 @@ ENV/
 
 README.rst
 MANIFEST
+
+*.py~

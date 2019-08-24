@@ -740,6 +740,16 @@ class PostgreSQL(unittest.TestCase):
     peeweedbevolve.clear()
     self.assertEqual(peeweedbevolve.calc_changes(self.db, ignore_tables=['somemodel']), [])
 
+  def test_add_blob_column(self):
+    self.test_create_table()
+    peeweedbevolve.clear()
+    class SomeModel(pw.Model):
+      some_field = pw.CharField(null=True)
+      another_field = pw.BlobField(null=True)
+      class Meta:
+        database = self.db
+    self.evolve_and_check_noop()
+    self.assertEqual(SomeModel.select().first().another_field, None)
 
 
 
