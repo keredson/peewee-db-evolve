@@ -275,14 +275,16 @@ class PostgreSQL(unittest.TestCase):
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    SomeModel.create(some_field=None)
+    x = SomeModel.create(some_field=None)
+    y = SomeModel.create(some_field='not_null')
     peeweedbevolve.clear()
     class SomeModel(pw.Model):
       some_field = pw.CharField(null=False, default='woot')
       class Meta:
         database = self.db
     self.evolve_and_check_noop()
-    self.assertEqual(SomeModel.select().first().some_field, 'woot')
+    self.assertEqual(SomeModel.select().where(SomeModel.id==x.id).first().some_field, 'woot')
+    self.assertEqual(SomeModel.select().where(SomeModel.id==y.id).first().some_field, 'not_null')
 
   def test_add_not_null_constraint_with_records_and_false_default(self):
     class SomeModel(pw.Model):

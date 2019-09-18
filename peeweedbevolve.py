@@ -29,7 +29,7 @@ PW3 = 'pw' in globals() and not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.2'
+__version__ = '3.7.3'
 
 
 try:
@@ -102,7 +102,13 @@ if PW3:
     return extract_query_from_migration(migration)
 
   def set_default(db, migrator, table_name, column_name, field):
-    migration = migrator.apply_default(table_name, column_name, field, with_context=True)
+    default = field.default
+    if callable(default): default = default()
+    migration = ( migrator.make_context()
+      .literal('UPDATE ').sql(pw.Entity(table_name))
+      .literal(' SET ').sql(pw.Expression(pw.Entity(column_name), pw.OP.EQ, field.db_value(default), flat=True))
+      .literal(' WHERE ').sql(pw.Expression(pw.Entity(column_name), pw.OP.IS, pw.SQL('NULL'), flat=True))
+    )
     return extract_query_from_migration(migration)
 
   def alter_add_column(db, migrator, ntn, column_name, field):
