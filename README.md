@@ -22,7 +22,12 @@ Functions
 ---------
 
  evolve(db, interactive=True, ignore_tables=None)
- see pydoc peeweedbevolve.html for more details
+
+Arguments
+---------
+
+aka etc add the kwargs here
+
 Example
 -------
 See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
