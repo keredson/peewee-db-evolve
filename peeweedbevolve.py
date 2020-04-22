@@ -29,7 +29,7 @@ PW3 = 'pw' in globals() and not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.5'
+__version__ = '3.7.6'
 
 
 try:
@@ -819,6 +819,8 @@ all_models = {}
 ignore_tables = set()
 
 def register(model):
+  if model.__module__=='playhouse.sqlite_ext':
+    return
   if hasattr(model._meta, 'evolve') and not model._meta.evolve:
     ignore_tables.add(_table_name(model))
   else:
