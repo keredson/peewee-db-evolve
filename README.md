@@ -21,10 +21,11 @@ Quick Start
 Functions
 ---------
 
-The function `evolve(db, interactive=True, ignore_tables=None)` is injected into Peewee's database object.
+The function `evolve(db, interactive=True, ignore_tables=None, schema=None)` is injected into Peewee's database object.
 
 - `interactive` if true will display the proposed changes and prompt you to confirm.  If false will apply them automatically.
 - `ignore_tables` takes a list of tables you don't want to evolve for whatever reason.
+- `schema` will evolve schemas other than your default schema.
 
 Usage
 -----
