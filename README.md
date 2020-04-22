@@ -21,12 +21,31 @@ Quick Start
 Functions
 ---------
 
- evolve(db, interactive=True, ignore_tables=None)
+The function `evolve(db, interactive=True, ignore_tables=None)` is injected into Peewee's database object.
 
-Arguments
----------
+- `interactive` if true will display the proposed changes and prompt you to confirm.  If false will apply them automatically.
+- `ignore_tables` takes a list of tables you don't want to evolve for whatever reason.
 
-aka etc add the kwargs here
+Usage
+-----
+
+Write your models as you normall would.  This project will diff the schema defined by your models from the schema
+defined in your database, and offer schema changes for your approval.
+
+Renaming columns can be achieved by using the `aka` keyword injected into Peewee's column definition.  For example, if you have:
+
+```python
+name = pw.CharField(null=True)
+```
+And you want to rename it to `full_name`, change your model definition to read:
+```python
+full_name = pw.CharField(null=True, aka='name')
+```
+This will generate a RENAME operation instead of a delete then an add.
+
+The parameter `aka` can be either a string or a list (if you have multiple previous names).  Once it's evolved you can
+remove it or leave it as you see fit.
+
 
 Example
 -------
