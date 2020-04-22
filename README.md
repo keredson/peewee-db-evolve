@@ -88,9 +88,39 @@ How to run:
 $ python3 test.py
 ..................................................................................................
 ----------------------------------------------------------------------
-Ran 98 tests in 39.860s
+Ran 110 tests in 49.408s
 
 OK
 ```
+
+If you get this:
+```
+EERROR 2002 (HY000): Can't connect to local MySQL server through socket '/var/run/mysqld/mysqld.sock' (2)
+```
+
+Something like this should get you going:
+```bash
+$ sudo apt install mysql-server
+[...]
+
+$ sudo cat /etc/mysql/debian.cnf
+# Automatically generated for Debian scripts. DO NOT TOUCH!
+[client]
+host     = localhost
+user     = debian-sys-maint
+password = XXXXXXXXXXXXX
+socket   = /var/run/mysqld/mysqld.sock
+
+$ mysql -u debian-sys-maint -p
+Enter password: 
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+mysql> CREATE USER 'derek'@'localhost';
+mysql> GRANT ALL ON *.* TO 'derek'@'localhost';
+mysql> flush privileges;
+```
+
+Obviously change `derek` to your username.
+
+**WARNING:** This creates an unauthenticated mysql user on your local box.  Don't do this if you have anything important in your local MySQL instance!
 
 <img src="https://travis-ci.org/keredson/peewee-db-evolve.svg">
