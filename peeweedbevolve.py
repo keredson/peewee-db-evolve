@@ -29,7 +29,7 @@ PW3 = 'pw' in globals() and not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.3'
+__version__ = '3.7.4'
 
 
 try:
@@ -642,6 +642,14 @@ def calc_changes(db, ignore_tables=None):
     model = table_names_to_models.get(ntn)
     if not model: continue
     defined_fields = model._meta.sorted_fields
+    
+    # composite keys do not come from peewee w/ the primary key bit set
+    if isinstance(model._meta.primary_key, pw.CompositeKey):
+      for field_name in model._meta.primary_key.field_names:
+        for field in defined_fields:
+          if field_name==field.name and not field.primary_key:
+            field.primary_key = True
+    
     defined_column_name_to_field = {unicode(_column_name(f)):f for f in defined_fields}
     existing_fks_by_column = {fk.column:fk for fk in foreign_keys_by_table[etn]}
     adds, deletes, renames, alter_statements = calc_column_changes(db, migrator, etn, ntn, ecols, defined_fields, existing_fks_by_column)

@@ -753,6 +753,14 @@ class PostgreSQL(unittest.TestCase):
     self.evolve_and_check_noop()
     self.assertEqual(SomeModel.select().first().another_field, None)
 
+  def test_composite_key_no_change(self):
+    class SomeModel(pw.Model):
+      x = pw.IntegerField()
+      y = pw.IntegerField()
+      class Meta:
+        primary_key = pw.CompositeKey('x', 'y')
+        database = self.db
+    self.evolve_and_check_noop()
 
 
 
