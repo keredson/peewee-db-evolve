@@ -18,6 +18,16 @@ Quick Start
 2. Add `import peeweedbevolve` anywhere before your models are defined.
 3. Run `db.evolve()` where you would have normally run `db.create_tables()`, and enjoy!
 
+Functions
+---------
+
+ evolve(db, interactive=True, ignore_tables=None)
+
+Arguments
+---------
+
+aka etc add the kwargs here
+
 Example
 -------
 See our [Hello World](https://github.com/keredson/peewee-db-evolve/tree/master/examples/hello_world) example.
