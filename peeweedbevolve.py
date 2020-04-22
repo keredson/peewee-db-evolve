@@ -29,7 +29,7 @@ PW3 = 'pw' in globals() and not hasattr(pw, 'Clause')
 # peewee doesn't do defaults in the database - doh!
 DIFF_DEFAULTS = False
 
-__version__ = '3.7.4'
+__version__ = '3.7.5'
 
 
 try:
@@ -411,15 +411,15 @@ ColumnMetadata = collections.namedtuple('ColumnMetadata', (
   'name', 'data_type', 'null', 'primary_key', 'table', 'default', 'max_length', 'precision', 'scale'
 ))
 
-def get_columns_by_table(db, schema='public'):
+def get_columns_by_table(db, schema=None):
   columns_by_table = collections.defaultdict(list)
   if is_postgres(db) or is_mysql(db):
-    if schema=='public' and is_mysql(db):
+    if schema is None and is_mysql(db):
       schema_check = 'c.table_schema=DATABASE()'
       params = []
     else:
       schema_check = 'c.table_schema=%s'
-      params = [schema]
+      params = [schema or 'public']
     sql = '''
         select
           c.column_name,
@@ -454,7 +454,7 @@ def get_columns_by_table(db, schema='public'):
 
 ForeignKeyMetadata = collections.namedtuple('ForeignKeyMetadata', ('column', 'dest_table', 'dest_column', 'table', 'name'))
 
-def get_foreign_keys_by_table(db, schema='public'):
+def get_foreign_keys_by_table(db, schema=None):
   fks_by_table = collections.defaultdict(list)
   if is_postgres(db):
     sql = """
@@ -466,7 +466,7 @@ def get_foreign_keys_by_table(db, schema='public'):
         on (ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema)
       where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = %s
     """
-    cursor = db.execute_sql(sql, (schema,))
+    cursor = db.execute_sql(sql, (schema or 'public',))
   elif is_mysql(db):
     sql = """
       select column_name, referenced_table_name, referenced_column_name, table_name, constraint_name
@@ -499,7 +499,7 @@ def get_foreign_keys_by_table(db, schema='public'):
     fks_by_table[fk.table].append(fk)
   return fks_by_table
 
-def get_indexes_by_table(db, table, schema='public'):
+def get_indexes_by_table(db, table, schema=None):
   # peewee's get_indexes returns the columns in an index in arbitrary order
   if is_postgres(db):
     query = '''
@@ -516,7 +516,7 @@ def get_indexes_by_table(db, table, schema='public'):
       where table_class.relname = %s and table_class.relkind = %s and idxs.schemaname = %s
       group by index_class.relname, idxs.indexdef, index.indisunique, table_class.relname;
     '''
-    cursor = db.execute_sql(query, (table, 'r', schema))
+    cursor = db.execute_sql(query, (table, 'r', schema or 'public'))
     return [pw.IndexMetadata(*row) for row in cursor.fetchall()]
   else:
     return db.get_indexes(table, schema=schema)
@@ -608,15 +608,15 @@ def calc_column_changes(db, migrator, etn, ntn, existing_columns, defined_fields
   return new_cols, delete_cols, rename_cols, alter_statements
 
 
-def calc_changes(db, ignore_tables=None):
+def calc_changes(db, ignore_tables=None, schema=None):
   migrator = None # expose eventually?
   if migrator is None:
     migrator = auto_detect_migrator(db)
 
-  existing_tables = [unicode(t) for t in db.get_tables()]
-  existing_indexes = {table:get_indexes_by_table(db, table) for table in existing_tables}
-  existing_columns_by_table = get_columns_by_table(db)
-  foreign_keys_by_table = get_foreign_keys_by_table(db)
+  existing_tables = [unicode(t) for t in (db.get_tables(schema=schema) if schema else db.get_tables())]
+  existing_indexes = {table:get_indexes_by_table(db, table, schema=schema) for table in existing_tables}
+  existing_columns_by_table = get_columns_by_table(db, schema=schema)
+  foreign_keys_by_table = get_foreign_keys_by_table(db, schema=schema)
 
   table_names_to_models = {_table_name(cls): cls for cls in all_models.keys()}
 
@@ -723,10 +723,10 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
     to_run += create_index(model, [fields_by_column_name[col] for col in index[1]], index[2])
   return to_run
 
-def evolve(db, interactive=True, ignore_tables=None):
+def evolve(db, interactive=True, ignore_tables=None, schema=None):
   if interactive:
     print((colorama.Style.BRIGHT + colorama.Fore.RED + 'Making updates to database: {}'.format(db.database) + colorama.Style.RESET_ALL))
-  to_run = calc_changes(db, ignore_tables=ignore_tables)
+  to_run = calc_changes(db, ignore_tables=ignore_tables, schema=schema)
   if not to_run:
     if interactive:
       print('Nothing to do... Your database is up to date!')
