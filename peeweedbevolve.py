@@ -392,6 +392,7 @@ def are_data_types_equal(db, type_a, type_b):
   if type_a == type_b: return True
   type_a, type_b = sorted([type_a, type_b])
   if is_mysql(db) and type_a=='bool' and type_b=='tinyint': return True
+  if is_mysql(db) and type_a=='uuidb' and type_b=='varbinary': return True
   if is_postgres(db) and type_a=='char' and type_b=='character': return True
   return False
 
