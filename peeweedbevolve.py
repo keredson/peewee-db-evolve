@@ -441,6 +441,14 @@ def get_columns_by_table(db, schema=None):
         order by c.ordinal_position
     ''' % schema_check
     cursor = db.execute_sql(sql, params)
+  elif is_sqlite(db):
+    for row in db.execute_sql("select name from sqlite_schema where type='table' and name NOT LIKE 'sqlite_%'"):
+      table_name = row[0]
+      for row in db.execute_sql("select name, type, 'notnull', dflt_value, pk from pragma_table_info(?)", [table_name]):
+        data_type = normalize_column_type(row[1])
+        column = ColumnMetadata(row[0], data_type, not row[2], row[4], table_name, row[3], None, None, None)
+        columns_by_table[column.table].append(column)
+    return columns_by_table
   else:
     raise Exception("don't know how to get columns for %s" % db)
   for row in cursor.fetchall():
@@ -478,19 +486,13 @@ def get_foreign_keys_by_table(db, schema=None):
   elif is_sqlite(db):
     # does not work
     sql = """
-      SELECT sql
-        FROM (
-              SELECT sql sql, type type, tbl_name tbl_name, name name
-                FROM sqlite_master
-               UNION ALL
-              SELECT sql, type, tbl_name, name
-                FROM sqlite_temp_master
-             )
-       WHERE type != 'meta'
-         AND sql NOTNULL
-         AND name NOT LIKE 'sqlite_%'
-         AND sql LIKE '%REFERENCES%'
-       ORDER BY substr(type, 2, 1), name
+      SELECT 
+          p."from", p."table", p."to", name, name||p.id
+      FROM
+          sqlite_master m
+          JOIN pragma_foreign_key_list(m.name) p ON m.name != p."table"
+      WHERE m.type = 'table'
+      ORDER BY m.name
     """
     cursor = db.execute_sql(sql, [])
   else:
