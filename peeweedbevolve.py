@@ -419,6 +419,7 @@ def are_data_types_equal(db, type_a, type_b):
   if is_mysql(db) and type_a=='bool' and type_b=='tinyint': return True
   if is_mysql(db) and type_a=='uuidb' and type_b=='varbinary': return True
   if is_postgres(db) and type_a=='char' and type_b=='character': return True
+  if is_sqlite(db) and type_a.startswith('decimal(') and type_b=='numeric': return True
   return False
 
 def column_def_changed(db, a, b):
@@ -428,8 +429,8 @@ def column_def_changed(db, a, b):
     not are_data_types_equal(db, a.data_type, b.data_type) or
     # https://github.com/coleifer/peewee/issues/1818
     (not is_sqlite(db) and b.max_length is not None and a.max_length!=b.max_length) or
-    (b.precision is not None and a.precision!=b.precision) or
-    (b.scale is not None and a.scale!=b.scale) or
+    (not is_sqlite(db) and b.precision is not None and a.precision!=b.precision) or
+    (not is_sqlite(db) and b.scale is not None and a.scale!=b.scale) or
     bool(a.primary_key)!=bool(b.primary_key) or
     (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
   )
