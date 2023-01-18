@@ -55,7 +55,7 @@ class PostgreSQL(unittest.TestCase):
     SomeModel.create(some_field='woot')
     self.assertEqual(SomeModel.select().first().some_field, 'woot')
 
-  def test_drop_table(self):
+  def test_drop_table(self, ex=pw.ProgrammingError):
     class SomeModel(pw.Model):
       some_field = pw.CharField(null=True)
       class Meta:
@@ -64,7 +64,7 @@ class PostgreSQL(unittest.TestCase):
     SomeModel.create(some_field='woot')
     peeweedbevolve.clear()
     self.evolve_and_check_noop()
-    with self.assertRaises(pw.ProgrammingError):
+    with self.assertRaises(ex):
       SomeModel.create(some_field='woot2') # fails because table isn't there
 
   def test_create_table_with_fk(self):
@@ -644,14 +644,14 @@ class PostgreSQL(unittest.TestCase):
         database = self.db
     self.evolve_and_check_noop()
 
-  def test_ignore_new_model(self):
+  def test_ignore_new_model(self, ex=pw.ProgrammingError):
     class SomeModel(pw.Model):
       some_field = pw.CharField(null=True)
       class Meta:
         database = self.db
         evolve = False
     self.evolve_and_check_noop()
-    with self.assertRaises(pw.ProgrammingError):
+    with self.assertRaises(ex):
       # should fail because table does not exist
       SomeModel.create(some_field='woot')
 
@@ -776,20 +776,26 @@ class PostgreSQL(unittest.TestCase):
 
 
 
-## SQLite doesn't work
-#class SQLite(PostgreSQL):
-#  @classmethod
-#  def setUpClass(cls):
-#    os.system('rm /tmp/peeweedbevolve_test.db')
-#
-#  def setUp(self):
-#    self.db = pw.SqliteDatabase('/tmp/peeweedbevolve_test.db')
-#    self.db.connect()
-#    peeweedbevolve.clear()
-#
-#  def tearDown(self):
-#    self.db.close()
-#    os.system('rm /tmp/peeweedbevolve_test.db')
+class SQLite(object): # change object to PostgreSQL to enable
+  @classmethod
+  def setUpClass(cls):
+    os.system('rm /tmp/peeweedbevolve_test.db')
+
+  def setUp(self):
+    self.db = pw.SqliteDatabase('/tmp/peeweedbevolve_test.db')
+    self.db.connect()
+    peeweedbevolve.clear()
+
+  def tearDown(self):
+    self.db.close()
+    os.system('rm /tmp/peeweedbevolve_test.db')
+
+  def test_ignore_new_model(self):
+    super().test_ignore_new_model(ex=pw.OperationalError)
+
+  def test_drop_table(self):
+    super().test_drop_table(ex=pw.OperationalError)
+    
 
 
 
