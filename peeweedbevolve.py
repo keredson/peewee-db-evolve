@@ -166,9 +166,10 @@ if PW3:
       migration = migrator._alter_column(ctx, table_name, column_name).literal(' TYPE ').sql(field.ddl_datatype(ctx))
     elif is_mysql(db):
       migration = migrator._alter_table(ctx, table_name).literal(' MODIFY COLUMN ').sql(field.ddl(ctx))
+    elif is_sqlite(db):
+      migration = migrator.alter_column_type(table_name, column_name, field)
     else:
       raise Exception('how do i change a column type for %s?' % db)
-
     return extract_query_from_migration(migration)
 
   def add_not_null(db, migrator, table, column_name, field):
@@ -425,10 +426,11 @@ def column_def_changed(db, a, b):
   return (
     a.null!=b.null or
     not are_data_types_equal(db, a.data_type, b.data_type) or
-    (b.max_length is not None and a.max_length!=b.max_length) or
+    # https://github.com/coleifer/peewee/issues/1818
+    (not is_sqlite(db) and b.max_length is not None and a.max_length!=b.max_length) or
     (b.precision is not None and a.precision!=b.precision) or
     (b.scale is not None and a.scale!=b.scale) or
-    a.primary_key!=b.primary_key or
+    bool(a.primary_key)!=bool(b.primary_key) or
     (DIFF_DEFAULTS and normalize_default(a.default)!=normalize_default(b.default))
   )
 
@@ -468,7 +470,7 @@ def get_columns_by_table(db, schema=None):
   elif is_sqlite(db):
     for row in db.execute_sql("select name from sqlite_schema where type='table' and name NOT LIKE 'sqlite_%'"):
       table_name = row[0]
-      for row in db.execute_sql("select name, type, 'notnull', dflt_value, pk from pragma_table_info(?)", [table_name]):
+      for row in db.execute_sql('select name, type, "notnull", dflt_value, pk from pragma_table_info(?)', [table_name]):
         data_type = normalize_column_type(row[1])
         column = ColumnMetadata(row[0], data_type, not row[2], row[4], table_name, row[3], None, None, None)
         columns_by_table[column.table].append(column)
