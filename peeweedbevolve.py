@@ -420,6 +420,7 @@ def are_data_types_equal(db, type_a, type_b):
   if is_mysql(db) and type_a=='uuidb' and type_b=='varbinary': return True
   if is_postgres(db) and type_a=='char' and type_b=='character': return True
   if is_sqlite(db) and type_a.startswith('decimal(') and type_b=='numeric': return True
+  if is_sqlite(db) and type_b.startswith('char(') and type_a=='char': return True
   return False
 
 def column_def_changed(db, a, b):
