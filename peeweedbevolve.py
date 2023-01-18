@@ -42,6 +42,7 @@ except NameError:
 # Peewee 2 Shims
 ###################
 
+
 if PW3:
   def extract_query_from_migration(migration):
     if isinstance(migration, Iterable):
@@ -49,7 +50,30 @@ if PW3:
       ctx = next(obj for obj in migration if isinstance(obj, pw.Context))
     else:
       ctx = migration
-    return [ctx.query()]
+    if hasattr(ctx, 'query'):
+      return [ctx.query()]
+    
+    # sqlite3
+    method = getattr(migration.migrator, getattr(migration, 'method'))
+    nodelist = method(*getattr(migration, 'args'), with_context=True)
+
+    # don't actually execute    
+    orig_execute = ctx.migrator.database.execute
+    def dummy_execute(*args, **kwargs): pass
+    ctx.migrator.database.execute = dummy_execute
+    
+    try:
+      nodes = []
+      def execute(node):
+        state = pw.Context()
+        pw_ctx = node.__sql__(state)
+        sql, args = pw_ctx.query()
+        nodes.append((sql, args))
+      ctx.execute = execute
+      ctx.run()
+    finally:
+      ctx.migrator.database.execute = orig_execute
+    return nodes
 
   def _table_name(model):
     return model._meta.table_name
