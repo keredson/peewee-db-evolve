@@ -547,6 +547,10 @@ def get_indexes_by_table(db, table, schema=None):
     '''
     cursor = db.execute_sql(query, (table, 'r', schema or 'public'))
     return [pw.IndexMetadata(*row) for row in cursor.fetchall()]
+  if is_sqlite(db):
+    # pks are indexes too
+    pk_indexes = [pw.IndexMetadata('', '', db.get_primary_keys(table, schema=schema), True, table)]
+    return pk_indexes + db.get_indexes(table, schema=schema)
   else:
     return db.get_indexes(table, schema=schema)
 
