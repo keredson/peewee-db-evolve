@@ -661,13 +661,6 @@ def calc_changes(db, ignore_tables=None, schema=None):
   table_renamed_from = {v: k for k, v in table_renames.items()}
   for tbl in table_adds:
     to_run += create_table(table_names_to_models[tbl])
-  for field in add_fks:
-    if hasattr(field, '__pwdbev__not_deferred') and field.__pwdbev__not_deferred:
-      field.deferred = False
-    to_run += create_foreign_key(field)
-  for k, v in table_renames.items():
-    to_run += rename_table(migrator, k, v)
-
 
   rename_cols_by_table = {}
   deleted_cols_by_table = {}
@@ -718,6 +711,13 @@ def calc_changes(db, ignore_tables=None, schema=None):
     existing_indexes_for_table = [i for i in existing_indexes.get(etn, []) if not any([(c in deletes) for c in i.columns])]
     to_run += calc_index_changes(db, migrator, existing_indexes_for_table, model, rename_cols_by_table.get(ntn, {}))
 
+  for field in add_fks:
+    if hasattr(field, '__pwdbev__not_deferred') and field.__pwdbev__not_deferred:
+      field.deferred = False
+    to_run += create_foreign_key(field)
+  for k, v in table_renames.items():
+    to_run += rename_table(migrator, k, v)
+    
   '''
   to_run += calc_perms_changes($schema_tables, noop) unless $check_perms_for.empty?
   '''
