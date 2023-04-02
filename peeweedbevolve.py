@@ -670,6 +670,9 @@ def calc_changes(db, ignore_tables=None):
     deleted_cols_by_table[ntn] = deletes
 
   for ntn, model in table_names_to_models.items():
+    # if ignoring this table, skip index manipulation
+    if model._meta.table_name in ignore_tables:
+      continue
     etn = table_renamed_from.get(ntn, ntn)
     deletes = deleted_cols_by_table.get(ntn,set())
     existing_indexes_for_table = [i for i in existing_indexes.get(etn, []) if not any([(c in deletes) for c in i.columns])]
