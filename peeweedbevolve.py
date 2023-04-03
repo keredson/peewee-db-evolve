@@ -718,10 +718,13 @@ def calc_index_changes(db, migrator, existing_indexes, model, renamed_cols):
     to_run += create_index(model, [fields_by_column_name[col] for col in index[1]], index[2])
   return to_run
 
-def evolve(db, interactive=True, ignore_tables=None, always_confirm_no=False):
+def evolve(db, interactive=True, ignore_tables=None, always_confirm_no=False, testing=False):
   if interactive:
     print((colorama.Style.BRIGHT + colorama.Fore.RED + 'Making updates to database: {}'.format(db.database) + colorama.Style.RESET_ALL))
   to_run = calc_changes(db, ignore_tables=ignore_tables)
+  # in testing mode, return the sql to run so that it can be checked for correctness
+  if testing:
+    return to_run
   if not to_run:
     if interactive:
       print('Nothing to do... Your database is up to date!')
